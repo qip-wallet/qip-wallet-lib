@@ -11,11 +11,12 @@ import * as tinysecp from "tiny-secp256k1";
 import  { ECPairFactory } from "ecpair";
 import mempoolJS from "@mempool/mempool.js";
 import {bech32m, bech32} from 'bech32';
+import QRCode from 'qrcode'
+
 
 
 initEccLib(tinysecp);
 const ECPair = ECPairFactory(tinysecp);
-
 
 
 export function createPassPhrase () {
@@ -27,11 +28,11 @@ export function createPassPhrase () {
     }
   }
 
-  export function accountKeys(config) {
+  export function accountKeys({networkName, passPhrase, path}) {
     try{
-      const network = getNetwork(config.networkName);
-      let code = new Mnemonic(config.passPhrase)
-      let xpriv = code.toHDPrivateKey(config.passPhrase).derive(`m/44/0/0/0/${config.path}`);
+      const network = getNetwork(networkName);
+      let code = new Mnemonic(passPhrase)
+      let xpriv = code.toHDPrivateKey(passPhrase).derive(`m/44/0/0/0/${path}`);
       let privateKey = xpriv.privateKey.toString();
       let keyPair = ECPair.fromPrivateKey(Buffer.from(privateKey.slice(0, 32)), {network});
       
@@ -44,19 +45,19 @@ export function createPassPhrase () {
     }
   };
 
-  export function createAddress (config) {
+  export function createAddress ({privateKey, wif, networkName, addressType}) {
     try {
-      const network = getNetwork(config.networkName);
+      const network = getNetwork(networkName);
       let keyPair;
-      if(config.privateKey){
-        keyPair = ECPair.fromPrivateKey(Buffer.from(config.privateKey), {network})
-      }else if(config.wif){
-        keyPair = ECPair.fromWIF(config.wif, network)
+      if(privateKey){
+        keyPair = ECPair.fromPrivateKey(Buffer.from(privateKey), {network})
+      }else if(wif){
+        keyPair = ECPair.fromWIF(wif, network)
       }
       let address;
       let script
 
-      switch (config.addressType){
+      switch (addressType){
         case "taproot":
           const tweakedSigner = tweakSigner(keyPair, { network });
           const p2tr = payments.p2tr({
@@ -79,9 +80,34 @@ export function createPassPhrase () {
       }
       return { address: address, script: script};
     } catch (e) {
-      console.log(e);
+      throw new Error(e.message)
     }
   };
+
+
+  export function getAllAddress ({privateKey, wif, networkName}) {
+    try {
+      let addressTypes = ["taproot", "segwit", "legacy"];
+      
+      let addressList = addressTypes.map((x)=> {
+        let addressDetails
+        if(privateKey){
+          addressDetails = createAddress({privateKey: privateKey, networkName:networkName, addressType:x})
+        }else if(config.wif){
+          addressDetails = createAddress({wif: wif, networkName:networkName, addressType:x})
+        }
+        return {
+          address: addressDetails.address,
+          addressType: x,
+          scriptType: getAddressType({address:addressDetails.address, networkName:networkName})
+        }
+      })
+
+      return addressList;
+    }catch(e){
+      throw new Error(e.message)
+    }
+  }
 
 
   export async function init (network) {
@@ -505,14 +531,13 @@ export function createPassPhrase () {
           return 'P2SH';
         }
 
-        if (/^(tb1|[mn2])[a-zA-HJ-NP-Z0-9]{25,39}$/.test(trimmedAddress)) {
-          if (trimmedAddress.startsWith('tb1q')) {
-            return 'P2WPKH';
-          }
-          if (trimmedAddress.startsWith('tb1p')) {
-            return 'P2TR';
-          }
+        if (trimmedAddress.startsWith('tb1q')) {
+          return 'P2WPKH';
         }
+        if (trimmedAddress.startsWith('tb1p')) {
+          return 'P2TR';
+        }
+        
         return null;
     }catch(e){
       throw new Error(e.message)
@@ -577,19 +602,6 @@ export function createPassPhrase () {
   }
   
   // Transaction Size Helpers
-  function getSizeOfScriptLengthElement (length) {
-    if (length < 75) {
-      return 1;
-    } else if (length <= 255) {
-      return 2;
-    } else if (length <= 65535) {
-      return 3;
-    } else if (length <= 4294967295) {
-      return 5;
-    } else {
-      alert('Size of redeem script is too large');
-    }
-  }
   
   function getSizeOfVarInt (length) {
     if (length < 253) {
@@ -633,3 +645,54 @@ export function createPassPhrase () {
 
     return witness_bytes * 3;
   }
+
+  function hasPushDataOpcode(script) {
+    const pushDataPattern = /OP_PUSHDATA[1-4]/;
+    return pushDataPattern.test(script);
+  }
+
+  export async function getAllUtxo ({networkName, address}) {
+    try{
+      let utxos = await getUtxo({networkName:networkName, address:address})
+      let allTx = await Promise.all(utxos.map(async (x) => {
+        return {
+          txid: x.txid,
+          vout: x.vout,
+          value: x.value,
+          isInscription: await hasInscription({utxo:x, address:address, networkName:networkName})
+        }
+    }))
+    return allTx;
+    }catch(e){
+      throw new Error(e.message)
+    }
+  }
+
+
+  export async function hasInscription ({utxo, address, networkName}){
+    try{
+      let {transactions} = await init(networkName) 
+      let addressType = getAddressType({address:address, networkName:networkName})
+      if(addressType == "P2TR" || addressType == "P2WPKH") {
+        let tx = await transactions.getTx({txid: utxo.txid})
+        if(tx.vout[utxo.vout].scriptpubkey_address === address && tx.vin[0].inner_witnessscript_asm !== undefined|null){
+          return hasPushDataOpcode(tx.vin[0].inner_witnessscript_asm)
+        }else{
+          return false
+        }
+      }else{
+        return false
+      } 
+    }catch(e){
+      throw new Error(e.message)
+    }
+  }
+
+  export async function genQrCode (data){
+    try{
+      return await QRCode.toDataURL(data)
+    }catch(e){
+      throw new Error(e.message)
+    }
+  }
+

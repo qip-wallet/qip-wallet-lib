@@ -1,13 +1,13 @@
 {
   "name": "qip-wallet",
-  "version": "1.0.4",
-  "description": "",
+  "version": "1.0.6",
+  "description": "A javascript bitcoin library used to build qip wallet",
   "main": "index.js",
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "",
+  "author": "obigwe joshua (blok-hamster)",
   "license": "ISC",
   "dependencies": {
     "@mempool/mempool.js": "^2.3.0",
@@ -18,6 +18,7 @@
     "browserify-fs": "^1.0.0",
     "ecpair": "^2.1.0",
     "ethers": "^5.7.2",
+    "qrcode": "^1.5.3",
     "tiny-secp256k1": "^2.2.3"
   }
 }
