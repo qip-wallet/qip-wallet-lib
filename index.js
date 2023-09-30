@@ -14,7 +14,8 @@ import {
   getAllAddress, 
   hasInscription ,
   getAllUtxo,
-  genQrCode
+  genQrCode,
+  createInscriptionTransacrion
 } from "./bitcoin/utils.js"
 
 export {
@@ -33,5 +34,6 @@ export {
   getAllAddress, 
   hasInscription,
   getAllUtxo,
-  genQrCode
+  genQrCode,
+  createInscriptionTransacrion
 }

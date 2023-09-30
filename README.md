@@ -14,11 +14,12 @@ A  javascript bitcoin library used to build qip wallet
   getInputData, 
   signTransaction, 
   getTransactionSize, 
-  accountKeys, 
+  accountKeys , 
   getAllAddress, 
-  hasInscription ,
+  hasInscription,
   getAllUtxo,
-  genQrCode
+  genQrCode,
+  createInscriptionTransacrion
 } from "./bitcoin/utils.js"
 
 

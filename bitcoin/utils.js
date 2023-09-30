@@ -141,7 +141,7 @@ export function createPassPhrase () {
   }
 
   //Transaction Methods
-   export async function getUtxo ({networkName, address}){
+  export async function getUtxo ({networkName, address}){
     try{
       const { addresses } = await init(networkName);
       let response = await addresses.getAddressTxsUtxo({ address: address });
@@ -180,7 +180,7 @@ export function createPassPhrase () {
 
   //input = [{txid: "", vout: 2, value: 20000}, {txid: "", vout: 0, value: 20000}]
   //output = [{address: "", value:32000}]
-   export async function createTransaction ({input, output, addressType, networkName, feeRate, privateKey, wif }) {
+  export async function createTransaction ({input, output, addressType, networkName, feeRate, privateKey, wif }) {
     try{ 
       let inputData = await getInputData(addressType,input,networkName,privateKey,wif)
       let outputData = output
@@ -222,15 +222,30 @@ export function createPassPhrase () {
 
       let txSize = getTransactionSize({input: input.length, output:outFeeData, addressType: addressType})
       let txFee = txSize.txBytes * feeRate
-      if(totalAvailable - txFee - toSpend <= 550) return new Error("not enough sats in input for transaction")
-      outputData.push({address:changeAddress, value: totalAvailable - toSpend - txFee})
-      
-      return {
-        input: inputData,
-        output: outputData,
-        transactionFee: txFee,
-        transactionSize: txSize,
-        totalSpent: toSpend + txFee
+      let changeAmount = totalAvailable - txFee - toSpend
+      if(toSpend + txFee > totalAvailable) {
+        throw new Error("not enough utxo balance for transactions")
+      }else if(changeAmount < 550 && changeAmount > 0){
+        let inputData = await getInputData(addressType, input, networkName, privateKey, wif)
+        let signedTx = signTransaction({networkName:networkName, privateKey:privateKey, wif:wif, addressType:addressType, input:inputData, output:output})
+        return {
+          txHex: signedTx.txHex,
+          tx: signedTx.signedTransaction,
+          fee: txFee,
+          satSpent: toSpend + txFee,
+          txSize: txSize,
+        }
+      }else{
+        outputData.push({address:changeAddress, value: totalAvailable - toSpend - txFee})
+        let inputData = await getInputData(addressType, input, networkName, privateKey, wif)
+        let signedTx = signTransaction({networkName:networkName, privateKey:privateKey, wif:wif, addressType:addressType, input:inputData, output:output})
+        return {
+          txHex: signedTx.txHex,
+          tx: signedTx.signedTransaction,
+          fee: txFee,
+          satSpent: toSpend + txFee,
+          txSize: txSize
+        }
       }
     }catch(e){
       throw new Error(e.message)
@@ -247,11 +262,7 @@ export function createPassPhrase () {
       let outPutFeeDetails = new Map();
       let outFeeData = [];
       
-      output.push({
-        address:receiver,
-        value:amount
-      })
-      
+      let receiverAddressType = getAddressType({address:receiver, networkName:networkName})
       if(privateKey){
         changeAddress = createAddress({addressType:addressType, networkName:networkName, privateKey:privateKey}).address;
         let changeAddressType = getAddressType({address:changeAddress, networkName:networkName})
@@ -261,7 +272,17 @@ export function createPassPhrase () {
         let changeAddressType = getAddressType({address:changeAddress, networkName:networkName})
         outPutFeeDetails.set(changeAddressType, 1)
       }
-
+      
+      if(outPutFeeDetails.get(receiverAddressType) === 0|undefined){
+        outPutFeeDetails.set(receiverAddressType, 1)
+      }else{
+        outPutFeeDetails.set(receiverAddressType, outPutFeeDetails.get(receiverAddressType)+1)
+      }
+      output.push({
+        address:receiver,
+        value:amount
+      })
+      
       outPutFeeDetails.forEach((value, key) => {
         outFeeData.push({
           outputType: key,
@@ -269,10 +290,15 @@ export function createPassPhrase () {
         })
       })
 
-
-      let utxos = await getUtxo({networkName:networkName, address:changeAddress})
+      let utxos = await getAllUtxo({networkName:networkName, address:account.address})
+    
+      let spendableUtxos = utxos.map(x => {
+        ids.push(x.txid)
+        if(x.isInscription === false)
+        return x
+      })
       
-      for(let i = 0; i < utxos.length; i++){
+      for(let i = 0; i < spendableUtxos.length; i++){
         let inputCount = 0
         if(input.length > 0){
           inputCount = input.length
@@ -282,9 +308,9 @@ export function createPassPhrase () {
         let txFee = txSize.txBytes * feeRate
         if(availableInput - txFee - amount < 550){
           input.push({
-            txid: utxos[i].txid,
-            vout: utxos[i].vout,
-            value: utxos[i].value
+            txid: spendableUtxos[i].txid,
+            vout: spendableUtxos[i].vout,
+            value: spendableUtxos[i].value
           })
           continue;
         }else{
@@ -327,21 +353,21 @@ export function createPassPhrase () {
     }
   }
 
-  export function signTransaction (transaction){
+  export function signTransaction ({networkName, privateKey,wif, addressType, input, output}){
     try{
-      const network = getNetwork(transaction.networkName)
+      const network = getNetwork(networkName)
       let keyPair;
-      if(transaction.privateKey){
-        keyPair = ECPair.fromPrivateKey(Buffer.from(transaction.privateKey), {network})
-      }else if(transaction.wif){
+      if(privateKey){
+        keyPair = ECPair.fromPrivateKey(Buffer.from(privateKey), {network})
+      }else if(wif){
         keyPair = ECPair.fromWIF(transaction.wif, network)
       }
-      if(transaction.addressType === "taproot"){
+      if(addressType === "taproot"){
         keyPair = tweakSigner(keyPair, network)
       }
       let psbt = new Psbt({network})
-      .addInputs(transaction.input)
-      .addOutputs(transaction.output)
+      .addInputs(input)
+      .addOutputs(output)
       .signAllInputs(keyPair)
       .finalizeAllInputs();
       const txs = psbt.extractTransaction();
@@ -668,7 +694,6 @@ export function createPassPhrase () {
     }
   }
 
-
   export async function hasInscription ({utxo, address, networkName}){
     try{
       let {transactions} = await init(networkName) 
@@ -693,6 +718,110 @@ export function createPassPhrase () {
       return await QRCode.toDataURL(data)
     }catch(e){
       throw new Error(e.message)
+    }
+  }
+
+  //inscriptionUtxo
+  export async function createInscriptionTransacrion ({inscriptionUtxo, receiver, feeRate, networkName, addressType, privateKey, wif}) {
+    //get all utxos
+    if(addressType === "legacy") throw new Error("Legacy address does not support inscriptions")
+    let account
+    let output = []
+    let input = []
+    let outPutFeeDetails = new Map();
+    let outFeeData = []
+    let availableInput = 0
+
+    let receiverAddressType = getAddressType({address:receiver, networkName:networkName})
+    if(privateKey){
+      account = createAddress({networkName:networkName, privateKey:privateKey, addressType:addressType})
+      let accountType = getAddressType({address:account.address, networkName:networkName})
+      outPutFeeDetails.set(accountType, 1)
+    }else{
+      account = createAddress({networkName:networkName, wif:wif, addressType:addressType})
+      let accountType = getAddressType({address:account.address, networkName:networkName})
+      outPutFeeDetails.set(accountType, 1)
+    }
+
+    if(!outPutFeeDetails.has(receiverAddressType)){
+      outPutFeeDetails.set(receiverAddressType, 1)
+    }else{
+      outPutFeeDetails.set(receiverAddressType, outPutFeeDetails.get(receiverAddressType)+1)
+    }
+    output.push({
+      address: receiver,
+      value: inscriptionUtxo.value
+    })
+    outPutFeeDetails.forEach((value, key) => {
+      outFeeData.push({
+        outputType: key,
+        count: value
+      })
+    })
+    
+    let utxos = await getAllUtxo({networkName:networkName, address:account.address})
+    let ids = []
+    let spendableUtxos = utxos.map(x => {
+      ids.push(x.txid)
+      if(x.isInscription === false)
+      return x
+    })
+    if(!ids.includes(inscriptionUtxo.txid)) throw new Error("inscription utxo not found")
+    input.push(inscriptionUtxo)
+
+    for(let i = 0; i < spendableUtxos.length; i++){
+      if(input.length == 1){
+        availableInput = availableInput + inscriptionUtxo.value
+      }else if(input.length > 1){
+        availableInput = availableInput + spendableUtxos[i].value
+      }
+      let txSize = getTransactionSize({input: input.length, output:outFeeData, addressType: addressType})
+      let txFee = txSize.txBytes * feeRate
+      if(availableInput - txFee < 550){
+        input.push({
+          txid: spendableUtxos[i].txid,
+          vout: spendableUtxos[i].vout,
+          value: spendableUtxos[i].value
+        })
+        continue;
+      }else{
+        input.push({
+          txid: spendableUtxos[i].txid,
+          vout: spendableUtxos[i].vout,
+          value: spendableUtxos[i].value
+        })
+        break;
+      }
+    }
+    
+    let changeAmount = availableInput - inscriptionUtxo.txid - txFee
+    
+    if(inscriptionUtxo.txid + txFee > availableInput) {
+      throw new Error("not enough utxo balance for transactions")
+    }else if(changeAmount < 550 && changeAmount > 0){
+      let inputData = await getInputData(addressType, input, networkName, privateKey, wif)
+      let signedTx = signTransaction({networkName:networkName, privateKey:privateKey, wif:wif, addressType:addressType, input:inputData, output:output})
+      return {
+        txHex: signedTx.txHex,
+        tx: signedTx.signedTransaction,
+        fee: txFee,
+        satSpent: inscriptionUtxo.txid + txFee ,
+        txSize: txSize
+      }
+    }else{
+      output.push({
+        address: account.address,
+        value: changeAmount
+      })
+      let inputData = await getInputData(addressType, input, networkName, privateKey, wif)
+      let signedTx = signTransaction({networkName:networkName, privateKey:privateKey, wif:wif, addressType:addressType, input:inputData, output:output})
+      return {
+        txHex: signedTx.txHex,
+        tx: signedTx.signedTransaction,
+        fee: txFee,
+        satSpent:inscriptionUtxo.txid + txFee ,
+        txSize: txSize
+      }
     }
   }
 
