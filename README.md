@@ -1,7 +1,7 @@
 # qip-wallet-lib
 A  javascript bitcoin library used to build qip wallet 
 
-'''js
+```js
   import {
 createAddress, 
   createPassPhrase, 
@@ -127,4 +127,4 @@ const createNewTransaction = async (input, output, key, addressType,networkName,
         console.log(e.message)
     }
 }
-'''
+```
