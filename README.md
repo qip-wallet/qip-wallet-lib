@@ -2,20 +2,25 @@
 A  javascript bitcoin library used to build qip wallet 
 
 ```js
-  import {
-createAddress, 
+ import {
+  createAddress, 
   createPassPhrase, 
   createSingleTransaction, 
   createTransaction, 
   getAddressType ,
   getFeeRate ,
-  signTransaction,
   getUtxo, 
-  getTransactionDetails,
+  getTransactionDetails, 
+  getInputData, 
+  signTransaction, 
   getTransactionSize, 
-  getInputData,  
-  accountKeys
-} from "qip-wallet"
+  accountKeys, 
+  getAllAddress, 
+  hasInscription ,
+  getAllUtxo,
+  genQrCode
+} from "./bitcoin/utils.js"
+
 
 
 //return passPhrase as string

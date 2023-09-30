@@ -1,6 +1,6 @@
 {
   "name": "qip-wallet",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "A javascript bitcoin library used to build qip wallet",
   "main": "index.js",
   "type": "module",
