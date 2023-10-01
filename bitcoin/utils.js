@@ -290,10 +290,8 @@ export function createPassPhrase () {
         })
       })
 
-      let utxos = await getAllUtxo({networkName:networkName, address:account.address})
-    
+      let utxos = await getAllUtxo({networkName:networkName, address:changeAddress})
       let spendableUtxos = utxos.map(x => {
-        ids.push(x.txid)
         if(x.isInscription === false)
         return x
       })
@@ -795,33 +793,27 @@ export function createPassPhrase () {
     }
     
     let changeAmount = availableInput - inscriptionUtxo.txid - txFee
+    let inputData
     
     if(inscriptionUtxo.txid + txFee > availableInput) {
       throw new Error("not enough utxo balance for transactions")
     }else if(changeAmount < 550 && changeAmount > 0){
-      let inputData = await getInputData(addressType, input, networkName, privateKey, wif)
-      let signedTx = signTransaction({networkName:networkName, privateKey:privateKey, wif:wif, addressType:addressType, input:inputData, output:output})
-      return {
-        txHex: signedTx.txHex,
-        tx: signedTx.signedTransaction,
-        fee: txFee,
-        satSpent: inscriptionUtxo.txid + txFee ,
-        txSize: txSize
-      }
+      inputData = await getInputData(addressType, input, networkName, privateKey, wif)
     }else{
       output.push({
         address: account.address,
         value: changeAmount
       })
-      let inputData = await getInputData(addressType, input, networkName, privateKey, wif)
-      let signedTx = signTransaction({networkName:networkName, privateKey:privateKey, wif:wif, addressType:addressType, input:inputData, output:output})
-      return {
-        txHex: signedTx.txHex,
-        tx: signedTx.signedTransaction,
-        fee: txFee,
-        satSpent:inscriptionUtxo.txid + txFee ,
-        txSize: txSize
-      }
+      inputData = await getInputData(addressType, input, networkName, privateKey, wif)
+    }
+
+    let signedTx = signTransaction({networkName:networkName, privateKey:privateKey, wif:wif, addressType:addressType, input:inputData, output:output})
+    return {
+      txHex: signedTx.txHex,
+      tx: signedTx.signedTransaction,
+      fee: txFee,
+      satSpent:inscriptionUtxo.txid + txFee ,
+      txSize: txSize
     }
   }
 
