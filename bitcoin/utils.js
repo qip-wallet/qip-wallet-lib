@@ -303,7 +303,7 @@ export function createPassPhrase () {
         if(input.length > 0){
           inputCount = input.length
         }
-        availableInput = availableInput + utxos[i].value
+        availableInput = availableInput + spendableUtxos[i].value
         let txSize = getTransactionSize({input: inputCount, output:outFeeData, addressType: addressType})
         let txFee = txSize.txBytes * feeRate
         if(availableInput - txFee - amount < 550){
@@ -315,9 +315,9 @@ export function createPassPhrase () {
           continue;
         }else{
           input.push({
-            txid: utxos[i].txid,
-            vout: utxos[i].vout,
-            value: utxos[i].value
+            txid: spendableUtxos[i].txid,
+            vout: spendableUtxos[i].vout,
+            value: spendableUtxos[i].value
           })
           break;
         }
