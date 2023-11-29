@@ -18,7 +18,7 @@ import {
   createInscriptionTransacrion
 } from "./bitcoin/utils.js"
 
-export {
+const qip_wallet = {
   createAddress, 
   createPassPhrase, 
   createSingleTransaction, 
@@ -30,10 +30,12 @@ export {
   getInputData, 
   signTransaction, 
   getTransactionSize, 
-  accountKeys , 
+  accountKeys, 
   getAllAddress, 
   hasInscription,
   getAllUtxo,
   genQrCode,
   createInscriptionTransacrion
 }
+
+export default qip_wallet

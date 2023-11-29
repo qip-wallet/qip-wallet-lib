@@ -180,21 +180,14 @@ export function createPassPhrase () {
 
   //input = [{txid: "", vout: 2, value: 20000}, {txid: "", vout: 0, value: 20000}]
   //output = [{address: "", value:32000}]
-  export async function createTransaction ({input, output, addressType, networkName, feeRate, privateKey, wif }) {
+  export async function createTransaction ({input, output, addressType, networkName, feeRate, privateKey, wif, changeAddress}) {
     try{ 
-      let inputData = await getInputData(addressType,input,networkName,privateKey,wif)
       let outputData = output
       let totalAvailable = 0;
       let toSpend = 0;
-      let changeAddress;
       let outPutFeeDetails = new Map();
       let outFeeData = [];
-      if(privateKey){
-        changeAddress = createAddress({addressType:addressType, networkName:networkName, privateKey:privateKey}).address;
-        let changeAddressType = getAddressType({address:changeAddress, networkName:networkName})
-        outPutFeeDetails.set(changeAddressType, 1)
-      }else if(privateKey){
-        changeAddress = createAddress({addressType:addressType, networkName:networkName, wif:wif}).address
+      if(changeAddress || changeAddress !== undefined){
         let changeAddressType = getAddressType({address:changeAddress, networkName:networkName})
         outPutFeeDetails.set(changeAddressType, 1)
       }
@@ -213,6 +206,8 @@ export function createPassPhrase () {
         }
       })
 
+      // outPutFeeDetails = mapping
+      // outFeeData = array
       outPutFeeDetails.forEach((value, key) => {
         outFeeData.push({
           outputType: key,
@@ -225,9 +220,10 @@ export function createPassPhrase () {
       let changeAmount = totalAvailable - txFee - toSpend
       if(toSpend + txFee > totalAvailable) {
         throw new Error("not enough utxo balance for transactions")
-      }else if(changeAmount < 550 && changeAmount > 0){
+      }
+      if(!changeAddress){
         let inputData = await getInputData(addressType, input, networkName, privateKey, wif)
-        let signedTx = signTransaction({networkName:networkName, privateKey:privateKey, wif:wif, addressType:addressType, input:inputData, output:output})
+        let signedTx = signTransaction({networkName:networkName, privateKey:privateKey, wif:wif, addressType:addressType, input:inputData, output:outputData})
         return {
           txHex: signedTx.txHex,
           tx: signedTx.signedTransaction,
@@ -235,10 +231,20 @@ export function createPassPhrase () {
           satSpent: toSpend + txFee,
           txSize: txSize,
         }
+      }else if(changeAddress && changeAmount < 1000){
+        let inputData = await getInputData(addressType, input, networkName, privateKey, wif)
+        let signedTx = signTransaction({networkName:networkName, privateKey:privateKey, wif:wif, addressType:addressType, input:inputData, output:outputData})
+        return {
+          txHex: signedTx.txHex,
+          tx: signedTx.signedTransaction,
+          fee: txFee,
+          satSpent: toSpend + txFee,
+          txSize: txSize
+        }
       }else{
         outputData.push({address:changeAddress, value: totalAvailable - toSpend - txFee})
         let inputData = await getInputData(addressType, input, networkName, privateKey, wif)
-        let signedTx = signTransaction({networkName:networkName, privateKey:privateKey, wif:wif, addressType:addressType, input:inputData, output:output})
+        let signedTx = signTransaction({networkName:networkName, privateKey:privateKey, wif:wif, addressType:addressType, input:inputData, output:outputData})
         return {
           txHex: signedTx.txHex,
           tx: signedTx.signedTransaction,
@@ -252,23 +258,17 @@ export function createPassPhrase () {
     }
   }
 
-  export async function createSingleTransaction ({receiver,amount,addressType,networkName,feeRate,privateKey, wif}) {
+  export async function createSingleTransaction ({receiver,amount,addressType,networkName,changeAddress,feeRate,privateKey, wif}) {
     try{
       //let outputData = output
       let input = [];
       let output = []
       let availableInput = 0
-      let changeAddress;
       let outPutFeeDetails = new Map();
       let outFeeData = [];
       
       let receiverAddressType = getAddressType({address:receiver, networkName:networkName})
-      if(privateKey){
-        changeAddress = createAddress({addressType:addressType, networkName:networkName, privateKey:privateKey}).address;
-        let changeAddressType = getAddressType({address:changeAddress, networkName:networkName})
-        outPutFeeDetails.set(changeAddressType, 1)
-      }else if(wif){
-        changeAddress = createAddress({addressType:addressType, networkName:networkName, wif:wif}).address
+      if(changeAddress || changeAddress !== undefined){
         let changeAddressType = getAddressType({address:changeAddress, networkName:networkName})
         outPutFeeDetails.set(changeAddressType, 1)
       }
@@ -304,7 +304,7 @@ export function createPassPhrase () {
         availableInput = availableInput + spendableUtxos[i].value
         let txSize = getTransactionSize({input: inputCount, output:outFeeData, addressType: addressType})
         let txFee = txSize.txBytes * feeRate
-        if(availableInput - txFee - amount < 550){
+        if(availableInput - txFee - amount < 1000){
           input.push({
             txid: spendableUtxos[i].txid,
             vout: spendableUtxos[i].vout,
@@ -323,7 +323,7 @@ export function createPassPhrase () {
 
       let txSize = getTransactionSize({input: input.length, output:outFeeData, addressType: addressType})
       let txFee = txSize.txBytes * feeRate
-      if(availableInput < txFee + amount + 550) throw new Error("available balance is not sufficient for transaction")
+      if(availableInput < txFee + amount + 1000) throw new Error("available balance is not sufficient for transaction")
       let transactionDetails;
 
       if(privateKey){
@@ -333,7 +333,8 @@ export function createPassPhrase () {
           addressType:addressType, 
           networkName:networkName,
           feeRate:feeRate,
-          privateKey
+          privateKey: privateKey,
+          changeAddress: changeAddress
         })
       }else if(wif){
         transactionDetails = await createTransaction({
@@ -342,7 +343,8 @@ export function createPassPhrase () {
           addressType:addressType, 
           networkName:networkName,
           feeRate:feeRate,
-          privateKey
+          wif: wif,
+          changeAddress: changeAddress
         })
       }
       return transactionDetails;
@@ -568,7 +570,6 @@ export function createPassPhrase () {
     }
   }
 
-
   function checkTaproot (address, networkName)  {
     try {
       if(networkName === "mainnet" && address.startsWith("tb1q")) return false
@@ -593,25 +594,29 @@ export function createPassPhrase () {
 
   //Taproot Tweek Helpers
   function tweakSigner(signer, opts) {
-    let privateKey = signer.privateKey;
-    if (!privateKey) {
-      throw new Error("Private key is required for tweaking signer!");
+    try{
+      let privateKey = signer.privateKey;
+      if (!privateKey) {
+        throw new Error("Private key is required for tweaking signer!");
+      }
+      if (signer.publicKey[0] === 3) {
+        privateKey = tinysecp.privateNegate(privateKey);
+      }
+    
+      const tweakedPrivateKey = tinysecp.privateAdd(
+        privateKey,
+        tapTweakHash(toXOnly(signer.publicKey), opts.tweakHash)
+      );
+      if (!tweakedPrivateKey) {
+        throw new Error("Invalid tweaked private key!");
+      }
+    
+      return ECPair.fromPrivateKey(Buffer.from(tweakedPrivateKey), {
+        network: opts.network,
+      });
+    }catch(e){
+      throw new Error(e.message)
     }
-    if (signer.publicKey[0] === 3) {
-      privateKey = tinysecp.privateNegate(privateKey);
-    }
-  
-    const tweakedPrivateKey = tinysecp.privateAdd(
-      privateKey,
-      tapTweakHash(toXOnly(signer.publicKey), opts.tweakHash)
-    );
-    if (!tweakedPrivateKey) {
-      throw new Error("Invalid tweaked private key!");
-    }
-  
-    return ECPair.fromPrivateKey(Buffer.from(tweakedPrivateKey), {
-      network: opts.network,
-    });
   }
   
   function tapTweakHash(pubKey, h) {
@@ -817,3 +822,5 @@ export function createPassPhrase () {
     }
   }
 
+
+  console.log(getTransactionSize({input:1000, output:[{outputType: "P2TR", count: 1}, {outputType: "P2PKH", count: 1}]}))
