@@ -823,4 +823,4 @@ export function createPassPhrase () {
   }
 
 
-  console.log(getTransactionSize({input:1000, output:[{outputType: "P2TR", count: 1}, {outputType: "P2PKH", count: 1}]}))
+  //console.log(getTransactionSize({input:1000, output:[{outputType: "P2TR", count: 1}, {outputType: "P2PKH", count: 1}]}))
