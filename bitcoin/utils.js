@@ -216,8 +216,9 @@ export function createPassPhrase () {
       })
 
       let txSize = getTransactionSize({input: input.length, output:outFeeData, addressType: addressType})
-      let txFee = txSize.txBytes * feeRate
+      let txFee = txSize.txVBytes * feeRate
       let changeAmount = totalAvailable - txFee - toSpend
+      
       if(toSpend + txFee > totalAvailable) {
         throw new Error("not enough utxo balance for transactions")
       }
@@ -303,7 +304,7 @@ export function createPassPhrase () {
         }
         availableInput = availableInput + spendableUtxos[i].value
         let txSize = getTransactionSize({input: inputCount, output:outFeeData, addressType: addressType})
-        let txFee = txSize.txBytes * feeRate
+        let txFee = txSize.txVBytes * feeRate
         if(availableInput - txFee - amount < 1000){
           input.push({
             txid: spendableUtxos[i].txid,
@@ -322,7 +323,7 @@ export function createPassPhrase () {
       }
 
       let txSize = getTransactionSize({input: input.length, output:outFeeData, addressType: addressType})
-      let txFee = txSize.txBytes * feeRate
+      let txFee = txSize.txVBytes * feeRate
       if(availableInput < txFee + amount + 1000) throw new Error("available balance is not sufficient for transaction")
       let transactionDetails;
 
@@ -779,7 +780,7 @@ export function createPassPhrase () {
         availableInput = availableInput + spendableUtxos[i].value
       }
       let txSize = getTransactionSize({input: input.length, output:outFeeData, addressType: addressType})
-      let txFee = txSize.txBytes * feeRate
+      let txFee = txSize.txVBytes * feeRate
       if(availableInput - txFee < 550){
         input.push({
           txid: spendableUtxos[i].txid,
@@ -821,6 +822,3 @@ export function createPassPhrase () {
       txSize: txSize
     }
   }
-
-
-  //console.log(getTransactionSize({input:1000, output:[{outputType: "P2TR", count: 1}, {outputType: "P2PKH", count: 1}]}))
