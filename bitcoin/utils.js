@@ -361,7 +361,7 @@ export function createPassPhrase () {
       if(privateKey){
         keyPair = ECPair.fromPrivateKey(Buffer.from(privateKey), {network})
       }else if(wif){
-        keyPair = ECPair.fromWIF(transaction.wif, network)
+        keyPair = ECPair.fromWIF(wif, network)
       }
       if(addressType === "taproot"){
         keyPair = tweakSigner(keyPair, network)
