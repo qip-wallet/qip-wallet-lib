@@ -6,6 +6,7 @@ import {
     crypto,
     payments,
     Psbt,
+    Transaction
 } from "bitcoinjs-lib";
 import * as tinysecp from "tiny-secp256k1";
 import  { ECPairFactory } from "ecpair";
@@ -371,6 +372,7 @@ export function createPassPhrase () {
       .addOutputs(output)
       .signAllInputs(keyPair)
       .finalizeAllInputs();
+      
       const txs = psbt.extractTransaction();
       const txHex = txs.toHex();
 
@@ -424,11 +426,13 @@ export function createPassPhrase () {
           }
           let tweakedSigner = tweakSigner(keyPair, { network });
           inData = inputTx.map((x) =>{
+            console.log("n_tapInternalKey:",toXOnly(Buffer.from(x.tx.vout[x.vout].scriptpubkey, "hex")))
+            console.log("tapInternalKey:", toXOnly(tweakedSigner.publicKey))
             return {
               hash:x.tx.txid,
               index:x.vout,
               witnessUtxo: {value: x.tx.vout[x.vout].value, script: Buffer.from(x.tx.vout[x.vout].scriptpubkey, "hex")},
-              tapInternalKey: toXOnly(tweakedSigner.publicKey)
+              tapInternalKey: toXOnly(tweakedSigner.publicKey),
             }
           })
           break
