@@ -29,22 +29,24 @@ export function createPassPhrase () {
     }
   }
 
-  export function accountKeys({networkName, passPhrase, path}) {
-    try{
-      const network = getNetwork(networkName);
-      let code = new Mnemonic(passPhrase)
-      let xpriv = code.toHDPrivateKey(passPhrase).derive(`m/44/0/0/0/${path}`);
-      let privateKey = xpriv.privateKey.toString();
-      let keyPair = ECPair.fromPrivateKey(Buffer.from(privateKey.slice(0, 32)), {network});
-      
-      return {
-        privateKey: keyPair.privateKey.toString(),
-        wif: keyPair.toWIF()
-      };
-    }catch(e){
-      throw new Error(e.message)
-    }
-  };
+export function accountKeys({networkName, passPhrase, path}) {
+  try{
+    const network = getNetwork(networkName);
+    let code = new Mnemonic(passPhrase)
+    let xpriv = code.toHDPrivateKey(passPhrase).derive(`m/86/0/${path}`);
+    let privateKey = xpriv.privateKey.toString();
+    let keyPair = ECPair.fromPrivateKey(Buffer.from(privateKey.slice(0, 32)), {network});
+    
+    return {
+      privateKey: keyPair.privateKey.toString(),
+      raw_privateKey: keyPair,
+      wif: keyPair.toWIF(),
+      pubKey: keyPair.publicKey
+    };
+  }catch(e){
+    throw new Error(e)
+  }
+};
 
   export function createAddress ({privateKey, wif, networkName, addressType}) {
     try {
@@ -56,7 +58,8 @@ export function createPassPhrase () {
         keyPair = ECPair.fromWIF(wif, network)
       }
       let address;
-      let script
+      let script;
+      let publicKey;
 
       switch (addressType){
         case "taproot":
@@ -67,19 +70,22 @@ export function createPassPhrase () {
         });
         address = p2tr.address ?? "";
         script = p2tr.output;
+        publicKey = p2tr.pubkey
         break;
         case "legacy":
           const p2pkh = payments.p2pkh({ pubkey: keyPair.publicKey, network: network })
           address = p2pkh.address ?? "";
           script = p2pkh.output;
+          publicKey = p2pkh.pubkey
         break;
         case "segwit":
           const p2wpkh = payments.p2wpkh({ pubkey: keyPair.publicKey , network: network})
           address = p2wpkh.address ?? "";
           script = p2wpkh.output;
+          publicKey = p2wpkh.pubkey
           break
       }
-      return { address: address, script: script};
+      return { address: address, script: script, publicKey: publicKey};
     } catch (e) {
       throw new Error(e.message)
     }
@@ -94,7 +100,7 @@ export function createPassPhrase () {
         let addressDetails
         if(privateKey){
           addressDetails = createAddress({privateKey: privateKey, networkName:networkName, addressType:x})
-        }else if(config.wif){
+        }else if(wif){
           addressDetails = createAddress({wif: wif, networkName:networkName, addressType:x})
         }
         return {
@@ -188,6 +194,14 @@ export function createPassPhrase () {
       let toSpend = 0;
       let outPutFeeDetails = new Map();
       let outFeeData = [];
+
+      let publicKey;
+      if(privateKey){
+        publicKey = createAddress({privateKey: privateKey, networkName: networkName, addressType: addressType}).publicKey
+      }else if(wif){
+        publicKey = createAddress({wif: wif, networkName: networkName, addressType: addressType}).publicKey
+      }
+
       if(changeAddress || changeAddress !== undefined){
         let changeAddressType = getAddressType({address:changeAddress, networkName:networkName})
         outPutFeeDetails.set(changeAddressType, 1)
@@ -223,133 +237,21 @@ export function createPassPhrase () {
       if(toSpend + txFee > totalAvailable) {
         throw new Error("not enough utxo balance for transactions")
       }
-      if(!changeAddress){
-        let inputData = await getInputData(addressType, input, networkName, privateKey, wif)
-        let signedTx = signTransaction({networkName:networkName, privateKey:privateKey, wif:wif, addressType:addressType, input:inputData, output:outputData})
-        return {
-          txHex: signedTx.txHex,
-          tx: signedTx.signedTransaction,
-          fee: txFee,
-          satSpent: toSpend + txFee,
-          txSize: txSize,
-        }
-      }else if(changeAddress && changeAmount < 1000){
-        let inputData = await getInputData(addressType, input, networkName, privateKey, wif)
-        let signedTx = signTransaction({networkName:networkName, privateKey:privateKey, wif:wif, addressType:addressType, input:inputData, output:outputData})
-        return {
-          txHex: signedTx.txHex,
-          tx: signedTx.signedTransaction,
-          fee: txFee,
-          satSpent: toSpend + txFee,
-          txSize: txSize
-        }
-      }else{
+
+  
+      if(changeAddress && changeAmount > 1000){
         outputData.push({address:changeAddress, value: totalAvailable - toSpend - txFee})
-        let inputData = await getInputData(addressType, input, networkName, privateKey, wif)
-        let signedTx = signTransaction({networkName:networkName, privateKey:privateKey, wif:wif, addressType:addressType, input:inputData, output:outputData})
-        return {
-          txHex: signedTx.txHex,
-          tx: signedTx.signedTransaction,
-          fee: txFee,
-          satSpent: toSpend + txFee,
-          txSize: txSize
-        }
       }
-    }catch(e){
-      throw new Error(e.message)
-    }
-  }
-
-  export async function createSingleTransaction ({receiver,amount,addressType,networkName,changeAddress,feeRate,privateKey, wif}) {
-    try{
-      //let outputData = output
-      let input = [];
-      let output = []
-      let availableInput = 0
-      let outPutFeeDetails = new Map();
-      let outFeeData = [];
-      
-      let receiverAddressType = getAddressType({address:receiver, networkName:networkName})
-      if(changeAddress || changeAddress !== undefined){
-        let changeAddressType = getAddressType({address:changeAddress, networkName:networkName})
-        outPutFeeDetails.set(changeAddressType, 1)
+      const inputData = await getInputData(addressType, input, networkName, publicKey)
+      const signedTx = signTransaction({networkName:networkName, privateKey:privateKey, wif:wif, addressType:addressType, input:inputData, output:outputData})
+      return {
+        txHex: signedTx.txHex,
+        tx: signedTx.signedTransaction,
+        fee: txFee,
+        satSpent: toSpend + txFee,
+        txSize: txSize
       }
-      
-      if(outPutFeeDetails.get(receiverAddressType) === 0|undefined){
-        outPutFeeDetails.set(receiverAddressType, 1)
-      }else{
-        outPutFeeDetails.set(receiverAddressType, outPutFeeDetails.get(receiverAddressType)+1)
-      }
-      output.push({
-        address:receiver,
-        value:amount
-      })
-      
-      outPutFeeDetails.forEach((value, key) => {
-        outFeeData.push({
-          outputType: key,
-          count: value
-        })
-      })
-
-      let utxos = await getAllUtxo({networkName:networkName, address:changeAddress})
-      let spendableUtxos = utxos.map(x => {
-        if(x.isInscription === false)
-        return x
-      })
-      
-      for(let i = 0; i < spendableUtxos.length; i++){
-        let inputCount = 0
-        if(input.length > 0){
-          inputCount = input.length
-        }
-        availableInput = availableInput + spendableUtxos[i].value
-        let txSize = getTransactionSize({input: inputCount, output:outFeeData, addressType: addressType})
-        let txFee = txSize.txVBytes * feeRate
-        if(availableInput - txFee - amount < 1000){
-          input.push({
-            txid: spendableUtxos[i].txid,
-            vout: spendableUtxos[i].vout,
-            value: spendableUtxos[i].value
-          })
-          continue;
-        }else{
-          input.push({
-            txid: spendableUtxos[i].txid,
-            vout: spendableUtxos[i].vout,
-            value: spendableUtxos[i].value
-          })
-          break;
-        }
-      }
-
-      let txSize = getTransactionSize({input: input.length, output:outFeeData, addressType: addressType})
-      let txFee = txSize.txVBytes * feeRate
-      if(availableInput < txFee + amount + 1000) throw new Error("available balance is not sufficient for transaction")
-      let transactionDetails;
-
-      if(privateKey){
-          transactionDetails = await createTransaction({
-          input:input, 
-          output:output, 
-          addressType:addressType, 
-          networkName:networkName,
-          feeRate:feeRate,
-          privateKey: privateKey,
-          changeAddress: changeAddress
-        })
-      }else if(wif){
-        transactionDetails = await createTransaction({
-          input:input, 
-          output:output, 
-          addressType:addressType, 
-          networkName:networkName,
-          feeRate:feeRate,
-          wif: wif,
-          changeAddress: changeAddress
-        })
-      }
-      return transactionDetails;
+    
     }catch(e){
       throw new Error(e.message)
     }
@@ -372,7 +274,7 @@ export function createPassPhrase () {
       .addOutputs(output)
       .signAllInputs(keyPair)
       .finalizeAllInputs();
-      
+
       const txs = psbt.extractTransaction();
       const txHex = txs.toHex();
 
@@ -384,13 +286,124 @@ export function createPassPhrase () {
       throw new Error(e.message)
     }
   }
+  
+  function getPsbtDetails ({networkName, input, output}){
+    try{
+      let psbt = new Psbt({network: getNetwork(networkName)})
+      .addInputs(input)
+      .addOutputs(output)
+      return {psbtHex: psbt.data.toHex(), psbtBase64: psbt.data.toBase64()};
+    }catch(e){
+      throw new Error(e.message)
+    }
+  }
 
+  export async function createTransaction2 ({input, output, addressType, networkName, feeRate, changeAddress, publicKey}) {
+    try{ 
+      let outputData = output
+      let totalAvailable = 0;
+      let toSpend = 0;
+      let outPutFeeDetails = new Map();
+      let outFeeData = [];
+
+      let pubKey = hexToBuffer(publicKey);
+      
+      if(changeAddress || changeAddress !== undefined){
+        let changeAddressType = getAddressType({address:changeAddress, networkName:networkName})
+        outPutFeeDetails.set(changeAddressType, 1)
+      }
+
+      input.forEach(x => {
+        totalAvailable = totalAvailable + x.value
+      })
+
+      output.forEach(x =>{
+        let outputType = getAddressType({address: x.address, networkName:networkName})
+        toSpend = toSpend + x.value
+        if(!outPutFeeDetails.has(outputType)){
+          outPutFeeDetails.set(outputType,1)
+        }else{
+          outPutFeeDetails.set(outputType, outPutFeeDetails.get(outputType)+1)
+        }
+      })
+
+      // outPutFeeDetails = mapping
+      // outFeeData = array
+      outPutFeeDetails.forEach((value, key) => {
+        outFeeData.push({
+          outputType: key,
+          count: value
+        })
+      })
+
+      let txSize = getTransactionSize({input: input.length, output:outFeeData, addressType: addressType})
+      let txFee = txSize.txVBytes * feeRate
+      let changeAmount = totalAvailable - txFee - toSpend
+      
+      if(toSpend + txFee > totalAvailable) {
+        throw new Error("not enough utxo balance for transactions")
+      }
+  
+      if(changeAddress && changeAmount > 1000){
+        outputData.push({address:changeAddress, value: totalAvailable - toSpend - txFee})
+      }
+      const inputData = await getInputData(addressType, input, networkName, pubKey)
+      let psbtData = getPsbtDetails({networkName:networkName, input:inputData, output:outputData})
+      return {
+        psbt: {
+          psbtHex: psbtData.psbtHex,
+          psbtBase64: psbtData.psbtBase64,
+        },
+        fee: txFee,
+        satSpent: toSpend + txFee,
+        txSize: txSize
+      }
+    
+    }catch(e){
+      throw new Error(e.message)
+    }
+  }
+
+  export function signTransaction2 ({psbt, networkName, privateKey,wif, addressType}) {
+    try{
+      const network = getNetwork(networkName)
+      let keyPair;
+      let publicKey;
+      if(privateKey){
+        keyPair = ECPair.fromPrivateKey(Buffer.from(privateKey), {network})
+        publicKey = createAddress({privateKey: privateKey, networkName: networkName, addressType: addressType}).publicKey
+      }else if(wif){
+        keyPair = ECPair.fromWIF(wif, network)
+        publicKey = createAddress({wif: wif, networkName: networkName, addressType: addressType}).publicKey
+      }
+      if(addressType === "taproot"){
+        keyPair = tweakSigner(keyPair, network)
+      }
+      
+      let psbtData = Psbt.fromBase64(psbt.psbtBase64, {network})
+      if(addressType !== 'taproot' || addressType !== 'segwit'){
+        psbtData.signAllInputs(keyPair)
+        psbtData.finalizeAllInputs()
+        return {txHex: psbtData.extractTransaction().toHex(), signedTransaction: psbtData.extractTransaction()}
+      }
+
+      psbtData.data.inputs.map((input, index) => {
+        let n_publicKey = buf2hex(input.witnessUtxo.script).slice(buf2hex(input.witnessUtxo.script).length - 64)
+        if(n_publicKey === buf2hex(publicKey)){
+          psbtData.signInput(index, keyPair)
+          psbtData.finalizeInput(index)
+        }
+      });
+      return {txHex: psbtData.extractTransaction().toHex(), signedTransaction: psbtData.extractTransaction()}
+    }catch(e){
+      throw new Error(e.message)
+    }
+  }
+  
   //input = [{txid: "", vout: 2, value: 20000}, {txid: "", vout: 0, value: 20000}]
- export async function getInputData(addressType, input, networkName, privateKey, wif){
+ export async function getInputData(addressType, input, networkName, publicKey){
     try{
       let{transactions} = await init(networkName)
-      let network = getNetwork(networkName)
-      let keyPair;
       let inData;
       let inputTx = await Promise.all(input.map(async(item)=>{
         return {tx: await transactions.getTx({txid:item.txid}), vout: item.vout}
@@ -419,20 +432,12 @@ export function createPassPhrase () {
           })
           break
         case "taproot":
-          if(privateKey){
-            keyPair = ECPair.fromPrivateKey(Buffer.from(privateKey), {network})
-          }else if(wif){
-            keyPair = ECPair.fromWIF(wif, network)
-          }
-          let tweakedSigner = tweakSigner(keyPair, { network });
           inData = inputTx.map((x) =>{
-            console.log("n_tapInternalKey:",toXOnly(Buffer.from(x.tx.vout[x.vout].scriptpubkey, "hex")))
-            console.log("tapInternalKey:", toXOnly(tweakedSigner.publicKey))
             return {
               hash:x.tx.txid,
               index:x.vout,
               witnessUtxo: {value: x.tx.vout[x.vout].value, script: Buffer.from(x.tx.vout[x.vout].scriptpubkey, "hex")},
-              tapInternalKey: toXOnly(tweakedSigner.publicKey),
+              tapInternalKey: publicKey
             }
           })
           break
@@ -612,6 +617,7 @@ export function createPassPhrase () {
         privateKey,
         tapTweakHash(toXOnly(signer.publicKey), opts.tweakHash)
       );
+
       if (!tweakedPrivateKey) {
         throw new Error("Invalid tweaked private key!");
       }
@@ -727,6 +733,16 @@ export function createPassPhrase () {
     }catch(e){
       throw new Error(e.message)
     }
+  }
+
+  function buf2hex(buffer) { // buffer is an ArrayBuffer
+    return [...new Uint8Array(buffer)]
+        .map(x => x.toString(16).padStart(2, '0'))
+        .join('');
+  }
+
+  function hexToBuffer(hex) {
+    return Buffer.from(hex, 'hex');
   }
 
   //inscriptionUtxo

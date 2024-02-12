@@ -1,7 +1,7 @@
 import {
   createAddress, 
   createPassPhrase, 
-  createSingleTransaction, 
+  createTransaction2,
   createTransaction, 
   getAddressType ,
   getFeeRate ,
@@ -9,6 +9,7 @@ import {
   getTransactionDetails, 
   getInputData, 
   signTransaction, 
+  signTransaction2,
   getTransactionSize, 
   accountKeys, 
   getAllAddress, 
@@ -18,11 +19,23 @@ import {
   createInscriptionTransacrion
 } from "./bitcoin/utils.js"
 
+import {
+  covertJsonToCbor,
+  getAddressEncoding,
+  getInscriptions,
+  getKeyPair,
+  getInitData,
+  splitFunds,
+  createInscribeTransactions,
+  getInscriptionCost
+} from "./bitcoin/inscription.js"
+
 const qip_wallet = {
   createAddress, 
-  createPassPhrase, 
-  createSingleTransaction, 
+  createPassPhrase,  
   createTransaction, 
+  createTransaction2,
+  signTransaction2,
   getAddressType ,
   getFeeRate ,
   getUtxo, 
@@ -35,7 +48,18 @@ const qip_wallet = {
   hasInscription,
   getAllUtxo,
   genQrCode,
-  createInscriptionTransacrion
+  createInscriptionTransacrion,
 }
 
-export default qip_wallet
+const inscription = {
+  covertJsonToCbor,
+  getAddressEncoding,
+  getInscriptions,
+  getKeyPair,
+  getInitData,
+  splitFunds,
+  createInscribeTransactions,
+  getInscriptionCost
+}
+
+export {qip_wallet, inscription}
