@@ -10,47 +10,52 @@
  import {cryptoUtils} from "../bitcoin/lib/cryptoUtils.js"
  import axios from 'axios'
  import {init, getTransactionSize, getUtxo} from './utils.js'
+import { error } from "console"
  
 const getFileData = async (file) => {
-    let files = [];
-    for (let i = 0; i < file.length; i++) {
-        let filename = file[i].split("/")[file[i].split("/").length -1]
-        let filePath = file[i]
-        let fileSize = fs.readFileSync(filePath).length
-        let mimetype = getMimeType(path.extname(file[i]));
+    try{    
+        let files = [];
+        for (let i = 0; i < file.length; i++) {
+            let filename = file[i].split("/")[file[i].split("/").length -1]
+            let filePath = file[i]
+            let fileSize = fs.readFileSync(filePath).length
+            let mimetype = getMimeType(path.extname(file[i]));
 
-        let _file = {name: filename, path: filePath, size:fileSize, type:mimetype }
+            let _file = {name: filename, path: filePath, size:fileSize, type:mimetype }
 
-        if (file[i].size >= 350000) {
-            throw("file size exceeds limit: ", file[i])
-        } 
+            if (file[i].size >= 350000) {
+                throw new Error ("file size exceeds limit: ", file[i])
+            } 
 
-        let b64;
+            let b64;
 
-        if (mimetype.includes("text/plain")) {
-            mimetype += ";charset=utf-8";
-            const text =  fs.readFileSync(filePath).toString()
-            files.push({
-                name: _file.name,
-                hex: textToHex(text),
-                mimetype: mimetype,
-                sha256: ""
-            });
-        }else{
-            b64 = await encodeBase64(_file);
-            let base64 = b64.substring(b64.indexOf("base64,") + 7);
-            let hex = base64ToHex(base64);
-            let sha256 = await fileToSha256Hex({name: _file.name, path:_file.path});
-            files.push({
-                name: _file.name,
-                hex: hex,
-                mimetype: mimetype,
-                sha256: sha256.replace('0x', '')
-            });
+            if (mimetype.includes("text/plain")) {
+                mimetype += ";charset=utf-8";
+                const text =  fs.readFileSync(filePath).toString()
+                files.push({
+                    name: _file.name,
+                    hex: textToHex(text),
+                    mimetype: mimetype,
+                    sha256: ""
+                });
+            }else{
+                b64 = await encodeBase64(_file);
+                let base64 = b64.substring(b64.indexOf("base64,") + 7);
+                let hex = base64ToHex(base64);
+                let sha256 = await fileToSha256Hex({name: _file.name, path:_file.path});
+                files.push({
+                    name: _file.name,
+                    hex: hex,
+                    mimetype: mimetype,
+                    sha256: sha256.replace('0x', '')
+                });
+            }
+        
         }
-    
+        return files
+    }catch(e){
+        throw new Error(e.message)
     }
-    return files
 };
 
 export const covertJsonToCbor = (obj) => {
@@ -64,7 +69,7 @@ export const getAddressEncoding = ({networkName}) => {
     }else if(networkName === "testnet"){
         return "testnet"
     }else{
-        throw(`networkName can only be mainnet, or testnet, received: ${networkName}`)
+        throw new Error (`networkName can only be mainnet, or testnet, received: ${networkName}`)
     }
 }
 
@@ -87,50 +92,51 @@ export const getKeyPair = ({privateKey}) => {
         }
 
     }catch(e){
-        console.log(e.message)
+        throw new Error(e.message)
     }
 }
 
 const createInscriptionScript = ({pubkey, mimetype, data, metadata}) => {
-    const ec = new TextEncoder();
-    if(!pubkey || !mimetype || !data){
-        throw("pubkey, mimetype, and data are required to create an inscription script. Received: ", pubkey, mimetype, data)
-    }
-    
-    let script = [];
-    let script_backup = [];
-    if(!metadata){
-        script = [ 
-            pubkey,
-            'OP_CHECKSIG',
-            'OP_0',
-            'OP_IF',
-            ec.encode('ord'),
-            '01',
-            mimetype,
-            'OP_0',
-            data,
-            'OP_ENDIF'
-        ];
-
-        script_backup = [
-            '0x' + buf2hex(pubkey.buffer),
-            'OP_CHECKSIG',
-            'OP_0',
-            'OP_IF',
-            '0x' + buf2hex(ec.encode('ord')),
-            '01',
-            '0x' + buf2hex(mimetype),
-            'OP_0',
-            '0x' + buf2hex(data),
-            'OP_ENDIF'
-        ];
-
-        return {
-            script: script,
-            script_backup: script_backup
+    try{
+        const ec = new TextEncoder();
+        if(!pubkey || !mimetype || !data){
+            throw new Error ("pubkey, mimetype, and data are required to create an inscription script. Received: ", pubkey, mimetype, data)
         }
-    }
+        
+        let script = [];
+        let script_backup = [];
+        if(!metadata){
+            script = [ 
+                pubkey,
+                'OP_CHECKSIG',
+                'OP_0',
+                'OP_IF',
+                ec.encode('ord'),
+                '01',
+                mimetype,
+                'OP_0',
+                data,
+                'OP_ENDIF'
+            ];
+
+            script_backup = [
+                '0x' + buf2hex(pubkey.buffer),
+                'OP_CHECKSIG',
+                'OP_0',
+                'OP_IF',
+                '0x' + buf2hex(ec.encode('ord')),
+                '01',
+                '0x' + buf2hex(mimetype),
+                'OP_0',
+                '0x' + buf2hex(data),
+                'OP_ENDIF'
+            ];
+
+            return {
+                script: script,
+                script_backup: script_backup
+            }
+        }
 
         script = [
             pubkey,
@@ -166,90 +172,95 @@ const createInscriptionScript = ({pubkey, mimetype, data, metadata}) => {
             script: script,
             script_backup: script_backup
         }
-
+    }catch(e){
+        throw new Error(e.message)
+    }
 }
 
 export const getInitData = ({privateKey, networkName}) => {
-    if(!networkName){
-        throw(`networkName can only be mainnet, or testnet, received: ${networkName}`)
-    }
+   try {
+        if(!networkName){
+            throw new Error (`networkName can only be mainnet, or testnet, received: ${networkName}`)
+        }
 
-    let addressEncoding = getAddressEncoding({networkName: networkName})
-    let privkey;
-    if(!privateKey){
-        privkey = bytesToHex(cryptoUtils.Noble.utils.randomPrivateKey());
-    }else{
-        privkey = privateKey
-    }
-    
-    const KeyPair = cryptoUtils.KeyPair;
-    let seckey = new KeyPair(privkey);
-    let pubkey = seckey.pub.rawX;
+        let addressEncoding = getAddressEncoding({networkName: networkName})
+        let privkey;
+        if(!privateKey){
+            privkey = bytesToHex(cryptoUtils.Noble.utils.randomPrivateKey());
+        }else{
+            privkey = privateKey
+        }
+        
+        const KeyPair = cryptoUtils.KeyPair;
+        let seckey = new KeyPair(privkey);
+        let pubkey = seckey.pub.rawX;
 
-    const init_script = [
-        pubkey,
-        'OP_CHECKSIG'
-    ];
+        const init_script = [
+            pubkey,
+            'OP_CHECKSIG'
+        ];
 
-    const init_script_backup = [
-        '0x' + buf2hex(pubkey.buffer),
-        'OP_CHECKSIG'
-    ];
+        const init_script_backup = [
+            '0x' + buf2hex(pubkey.buffer),
+            'OP_CHECKSIG'
+        ];
 
-    let init_leaf = Tap.encodeScript(init_script);
-    let [init_tapkey, init_cblock] = Tap.getPubKey(pubkey, {target: init_leaf});
+        let init_leaf = Tap.encodeScript(init_script);
+        let [init_tapkey, init_cblock] = Tap.getPubKey(pubkey, {target: init_leaf});
 
-    /**
-     * This is to test IF the tx COULD fail.
-     * This is most likely happening due to an incompatible key being generated.
-     */
-    const test_redeemtx = Tx.create({
-        vin  : [{
-            txid: 'a99d1112bcb35845fd44e703ef2c611f0360dd2bb28927625dbc13eab58cd968',
-            vout: 0,
-            prevout: {
-                value: 10000,
+        /**
+         * This is to test IF the tx COULD fail.
+         * This is most likely happening due to an incompatible key being generated.
+         */
+        const test_redeemtx = Tx.create({
+            vin  : [{
+                txid: 'a99d1112bcb35845fd44e703ef2c611f0360dd2bb28927625dbc13eab58cd968',
+                vout: 0,
+                prevout: {
+                    value: 10000,
+                    scriptPubKey: [ 'OP_1', init_tapkey ]
+                },
+            }],
+            vout : [{
+                value: 8000,
                 scriptPubKey: [ 'OP_1', init_tapkey ]
-            },
-        }],
-        vout : [{
-            value: 8000,
-            scriptPubKey: [ 'OP_1', init_tapkey ]
-        }],
-    });
+            }],
+        });
 
-    const test_sig = Signer.taproot.sign(seckey.raw, test_redeemtx, 0, {extension: init_leaf});
-    test_redeemtx.vin[0].witness = [ test_sig.hex, init_script, init_cblock ];
-    const isValid = Signer.taproot.verify(test_redeemtx, 0, { pubkey });
+        const test_sig = Signer.taproot.sign(seckey.raw, test_redeemtx, 0, {extension: init_leaf});
+        test_redeemtx.vin[0].witness = [ test_sig.hex, init_script, init_cblock ];
+        const isValid = Signer.taproot.verify(test_redeemtx, 0, { pubkey });
 
-    if(!isValid)
-    {
-        throw('Generated keys could not be validated, Try again');
-    }
+        if(!isValid)
+        {
+            throw new Error ('Generated keys could not be validated, Try again');
+        }
 
-    let fundingAddress = Address.p2tr.encode(init_tapkey, addressEncoding);
-  
-    return {
-        privateKey: privkey,
-        publicKey: buf2hex(pubkey.buffer),
-        validSigner: true,
-        fundingAddress: fundingAddress,
-        // scripts: {
-        //     init_script: init_script,
-        //     init_script_backup: init_script_backup
-        // },
-        init_leaf:init_leaf,
-        init_cblock: init_cblock,
-        init_tapkey: init_tapkey,
-    }
+        let fundingAddress = Address.p2tr.encode(init_tapkey, addressEncoding);
     
+        return {
+            privateKey: privkey,
+            publicKey: buf2hex(pubkey.buffer),
+            validSigner: true,
+            fundingAddress: fundingAddress,
+            // scripts: {
+            //     init_script: init_script,
+            //     init_script_backup: init_script_backup
+            // },
+            init_leaf:init_leaf,
+            init_cblock: init_cblock,
+            init_tapkey: init_tapkey,
+        }
+    }catch(e){
+        throw new Error(e.message)
+    }
 }
 
 const _getInscription = ({files, publicKey, networkName, feerate, padding, options}) => {
     try{
         const ec = new TextEncoder();
         if(!files || !publicKey || !networkName){
-            throw("files, publicKey, and networkName are required to create an inscription. Received: ", files, publicKey, networkName)
+            throw new Error ("files, publicKey, and networkName are required to create an inscription. Received: ", files, publicKey, networkName)
         }
         const hex = files.hex;
         const data = hexToBytes(hex);
@@ -300,7 +311,7 @@ const _getInscription = ({files, publicKey, networkName, feerate, padding, optio
         }
         
     }catch(e){
-        console.log(e.message)
+        throw new Error(e.message)
     }
 }
 
@@ -332,7 +343,7 @@ export const getInscriptionCost = ({fileSizes, feerate, padding, options}) => {
         let total_fees = total_fee
         if(options && options.service_fee){
             if(!options.service_address){
-                throw("service_address is required to add a service fee")
+                throw new Error ("service_address is required to add a service fee")
             }
             const prefix = getTransactionSize({input:1, output:[{outputType: "P2TR", count: 1}], addressType: "taptoot"}).txBytes * feerate;
             total_fees += options.service_fee * fileSizes.length + prefix
@@ -340,7 +351,7 @@ export const getInscriptionCost = ({fileSizes, feerate, padding, options}) => {
         }
         if(options && options.collection_fee){
             if(!options.collection_address){
-                throw("collection_address is required to add a collection fee")
+                throw new Error ("collection_address is required to add a collection fee")
             }
             const prefix = getTransactionSize({input:1, output:[{outputType: "P2TR", count: 1}], addressType: "taptoot"}).txBytes * feerate;
             total_fees += options.collection_fee * fileSizes.length + prefix
@@ -352,7 +363,7 @@ export const getInscriptionCost = ({fileSizes, feerate, padding, options}) => {
         return total_fees
 
     }catch(e){
-        console.log(e)
+        throw new Error(e.message)
     }
 }
 
@@ -365,13 +376,13 @@ export const getInscriptions = async ({filePaths, publicKey, networkName, feerat
         let inputs = 1
         if(options && options.satTx){
             if(typeof options.satTx.txid !== "string"){
-                throw("satTx Txid must be a string")
+                throw new Error ("satTx Txid must be a string")
             }
             inputs += 2
         }
 
         if(files.length > 1 && options && options.satTx){
-            throw(`inscription on special sat can only be done on one file, you have ${files.length} files`)
+            throw new Error (`inscription on special sat can only be done on one file, you have ${files.length} files`)
         }
 
         for (let i = 0; i < files.length; i++) {
@@ -385,7 +396,7 @@ export const getInscriptions = async ({filePaths, publicKey, networkName, feerat
         let total_fees = total_fee
         if(options && options.service_fee){
             if(!options.service_address){
-                throw("service_address is required to add a service fee")
+                throw new Error ("service_address is required to add a service fee")
             }
             const prefix = getTransactionSize({input:1, output:[{outputType: "P2TR", count: 1}], addressType: "taptoot"}).txBytes * feerate;
             total_fees += options.service_fee * inscriptions.length + prefix
@@ -393,7 +404,7 @@ export const getInscriptions = async ({filePaths, publicKey, networkName, feerat
         }
         if(options && options.collection_fee){
             if(!options.collection_address){
-                throw("collection_address is required to add a collection fee")
+                throw new Error ("collection_address is required to add a collection fee")
             }
             const prefix = getTransactionSize({input:1, output:[{outputType: "P2TR", count: 1}], addressType: "taptoot"}).txBytes * feerate;
             total_fees += options.collection_fee * inscriptions.length + prefix
@@ -425,21 +436,21 @@ export const getInscriptions = async ({filePaths, publicKey, networkName, feerat
             total_fees: total_fees
         }
     }catch(e){
-        console.log(e)
+        throw new Error(e.message)
     }
 }
 
 const handleSatTx = async ({satTx, networkName, address}) => {
     try{
         if(!satTx.vout && !satTx.txid){
-            throw("satTx txid, vout and required")
+            throw new Error ("satTx txid, vout and required")
         }
         if(typeof satTx.txid !== "string"){
-            throw("satTx Txid must be a string")
+            throw new Error ("satTx Txid must be a string")
         }
         let utxos = await getUtxo({networkName: networkName, address: address})
         if(utxos.length === 0){
-            throw("no utxo outputs available")
+            throw new Error ("no utxo outputs available")
         }
         let sat_utxo
         utxos.forEach(x => {
@@ -449,7 +460,7 @@ const handleSatTx = async ({satTx, networkName, address}) => {
         })
         return sat_utxo
     }catch(e){
-        console.log(e)
+        throw new Error(e.message)
     }
 
 }
@@ -457,7 +468,7 @@ const handleSatTx = async ({satTx, networkName, address}) => {
 export const splitFunds = async ({filePaths, privateKey, networkName, feerate, padding, options}) => {
     try{
         if(!filePaths || !privateKey || !networkName || !feerate || !padding){
-            throw("filePaths, privateKey, networkName, feerate, and padding are required to create an inscription. Received: ", filePaths, privateKey, networkName, feerate, padding)
+            throw new Error("filePaths, privateKey, networkName, feerate, and padding are required to create an inscription. Received: ", filePaths, privateKey, networkName, feerate, padding)
         }
         let initData = getInitData({privateKey: privateKey, networkName: networkName})
         let fundingAddress = initData.fundingAddress;
@@ -514,13 +525,16 @@ export const splitFunds = async ({filePaths, privateKey, networkName, feerate, p
         }
 
         let utxos = await getUtxo({address: fundingAddress, networkName: networkName})
+        
         if(utxos.length === 0){
-            throw("No funds available for inscription")
+            throw new Error("No funds available for inscription")
         }
         let spend_utxo 
         utxos.forEach(x => {
             if(x.value >= total_fees){
                 spend_utxo = x
+            }else{
+                throw new Error("Insufficient funds")
             }
         })
 
@@ -568,7 +582,7 @@ export const splitFunds = async ({filePaths, privateKey, networkName, feerate, p
         const txid = Tx.util.getTxid(Tx.encode(init_redeemtx))
         return {txHex: rawtx, txid: txid}
     }catch(e){
-        console.log(e)
+        throw new Error(e.message)
     }
 
 }
@@ -577,7 +591,7 @@ export const createInscribeTransactions = async ({filePaths, privateKey, receive
     try{
 
         if(!filePaths || !privateKey || !receiveAddress || !networkName || !feerate || !padding){
-            throw("filePaths, privateKey, receiveAddress, networkName, feerate, and padding are required to create an inscription. Received: ", filePaths, privateKey, receiveAddress, networkName, feerate, padding)
+            throw new Error("filePaths, privateKey, receiveAddress, networkName, feerate, and padding are required to create an inscription. Received: ", filePaths, privateKey, receiveAddress, networkName, feerate, padding)
         }
 
         const keyPair = getKeyPair({privateKey: privateKey})
@@ -597,7 +611,7 @@ export const createInscribeTransactions = async ({filePaths, privateKey, receive
             let addressEncoding = getAddressEncoding({networkName: networkName})
             let utxos = await getUtxo({address: inscription.inscriptionAddress, networkName: networkName})
             if(utxos.length === 0){
-                throw("No funds available for inscription")
+                throw new Error("No funds available for inscription")
             }
             let spend_utxo 
             utxos.forEach(x => {
@@ -629,7 +643,7 @@ export const createInscribeTransactions = async ({filePaths, privateKey, receive
         }
         return transactions
     }catch(e){
-        console.log(e.message)
+        throw new Error(e.message)
     }
 }
 
@@ -849,37 +863,37 @@ function sleep(ms) {
 //in txt format create a documentation for all the exported functions in this file
 //create a test file for all the functions in this file
 
-// const options = {   
-//     service_fee: 1000, 
-//     service_address: "tb1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0ysppm29h", 
-//     collection_fee: 1000, 
-//     collection_address: "tb1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0ysppm29h", 
-//     metadata: {creator: "arch.xyz", collection: "test collection", platform: "inscribable.xyz"},
-//     // satTx: {
-//     //     txid: "9225058961e6e73273d9b58748dbcd5f832a3f0cebbb88daf424e0c15314ab56",
-//     //     vout: 0,
-//     //     value: 1000
-//     // }
-// }
-// let filePaths = [`${process.cwd()}/testImg/1.png`, `${process.cwd()}/testImg/2.png`, `${process.cwd()}/testImg/3.png`, `${process.cwd()}/testImg/4.png`]
-// let feeRate = 21
-// let padding = 550
-// let publicKey = "c20611775f8a757e25c7aa16b8f507d83bbd7a3ffcd202244876ff46909bfd2c"
-// let privateKey = "f7efd830eb4aec724f605bac64215ced8785f6a0b42d795d0d6dfad8096607be"
+const options = {   
+    service_fee: 1000, 
+    service_address: "tb1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0ysppm29h", 
+    //collection_fee: 1000, 
+    //collection_address: "tb1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0ysppm29h", 
+    //metadata: {creator: "arch.xyz", collection: "test collection", platform: "inscribable.xyz"},
+    // satTx: {
+    //     txid: "9225058961e6e73273d9b58748dbcd5f832a3f0cebbb88daf424e0c15314ab56",
+    //     vout: 0,
+    //     value: 1000
+    // }
+}
+let filePaths = [`${process.cwd()}/testImg/5.png`]
+let feeRate = 10
+let padding = 550
+let publicKey = "ed1c0fe066cc7853988b633fb842859c3b9697e07703f69b9ad43a5d9dad5d8e"
+let privateKey = "61d89cb96822917abf5d502e671833c884523f533f144ca2c83d6cd83de0ea68"
 
 // getInscriptions({filePaths: filePaths, publicKey: publicKey, networkName: "testnet", feerate: feeRate, padding: padding, options: options }).then(res => {
 //     console.log(res)
 // }).catch()
 
-// splitFunds({filePaths: filePaths, privateKey: privateKey, networkName: "testnet", feerate: feeRate, padding: padding, options: options}).then(res => {
-//     console.log(res)
-// }).catch()
+splitFunds({filePaths: filePaths, privateKey: privateKey, networkName: "testnet", feerate: feeRate, padding: padding, options: options}).then(res => {
+    console.log(res)
+}).catch()
 
 // createInscribeTransactions({filePaths:filePaths, privateKey:privateKey, receiveAddress:"tb1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0ysppm29h", networkName:"testnet", feerate:feeRate, padding:padding, options:options}).then(res => {
 //     console.log(res)
 // }).catch()
 
-//console.log(getInitData({networkName: "testnet", privateKey: privateKey}))
+console.log(getInitData({networkName: "testnet", privateKey: privateKey}))
 //console.log(getKeyPair({networkName: "testnet"}))
 
 //console.log(getInscriptionCost({fileSizes: [472, 490, 494, 408], feerate: feeRate, padding: 550, options: options}))
