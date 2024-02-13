@@ -863,37 +863,37 @@ function sleep(ms) {
 //in txt format create a documentation for all the exported functions in this file
 //create a test file for all the functions in this file
 
-const options = {   
-    service_fee: 1000, 
-    service_address: "tb1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0ysppm29h", 
-    //collection_fee: 1000, 
-    //collection_address: "tb1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0ysppm29h", 
-    //metadata: {creator: "arch.xyz", collection: "test collection", platform: "inscribable.xyz"},
-    // satTx: {
-    //     txid: "9225058961e6e73273d9b58748dbcd5f832a3f0cebbb88daf424e0c15314ab56",
-    //     vout: 0,
-    //     value: 1000
-    // }
-}
-let filePaths = [`${process.cwd()}/testImg/5.png`]
-let feeRate = 10
-let padding = 550
-let publicKey = "ed1c0fe066cc7853988b633fb842859c3b9697e07703f69b9ad43a5d9dad5d8e"
-let privateKey = "61d89cb96822917abf5d502e671833c884523f533f144ca2c83d6cd83de0ea68"
+// const options = {   
+//     service_fee: 1000, 
+//     service_address: "tb1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0ysppm29h", 
+//     //collection_fee: 1000, 
+//     //collection_address: "tb1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0ysppm29h", 
+//     //metadata: {creator: "arch.xyz", collection: "test collection", platform: "inscribable.xyz"},
+//     // satTx: {
+//     //     txid: "9225058961e6e73273d9b58748dbcd5f832a3f0cebbb88daf424e0c15314ab56",
+//     //     vout: 0,
+//     //     value: 1000
+//     // }
+// }
+// let filePaths = [`${process.cwd()}/testImg/5.png`]
+// let feeRate = 10
+// let padding = 550
+// let publicKey = "ed1c0fe066cc7853988b633fb842859c3b9697e07703f69b9ad43a5d9dad5d8e"
+// let privateKey = "61d89cb96822917abf5d502e671833c884523f533f144ca2c83d6cd83de0ea68"
 
 // getInscriptions({filePaths: filePaths, publicKey: publicKey, networkName: "testnet", feerate: feeRate, padding: padding, options: options }).then(res => {
 //     console.log(res)
 // }).catch()
 
-splitFunds({filePaths: filePaths, privateKey: privateKey, networkName: "testnet", feerate: feeRate, padding: padding, options: options}).then(res => {
-    console.log(res)
-}).catch()
+// splitFunds({filePaths: filePaths, privateKey: privateKey, networkName: "testnet", feerate: feeRate, padding: padding, options: options}).then(res => {
+//     console.log(res)
+// }).catch()
 
 // createInscribeTransactions({filePaths:filePaths, privateKey:privateKey, receiveAddress:"tb1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0ysppm29h", networkName:"testnet", feerate:feeRate, padding:padding, options:options}).then(res => {
 //     console.log(res)
 // }).catch()
 
-console.log(getInitData({networkName: "testnet", privateKey: privateKey}))
+//console.log(getInitData({networkName: "testnet", privateKey: privateKey}))
 //console.log(getKeyPair({networkName: "testnet"}))
 
 //console.log(getInscriptionCost({fileSizes: [472, 490, 494, 408], feerate: feeRate, padding: 550, options: options}))
