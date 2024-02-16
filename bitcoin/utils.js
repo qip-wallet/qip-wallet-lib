@@ -35,7 +35,7 @@ export function accountKeys({networkName, passPhrase, path}) {
     let code = new Mnemonic(passPhrase)
     let xpriv = code.toHDPrivateKey(passPhrase).derive(`m/86/0/${path}`);
     let privateKey = xpriv.privateKey.toString();
-    let keyPair = ECPair.fromPrivateKey(Buffer.from(privateKey.slice(0, 32)), {network});
+    let keyPair = ECPair.fromPrivateKey(Buffer.from(privateKey, "hex"), {network});
     
     return {
       privateKey: keyPair.privateKey.toString(),
@@ -53,7 +53,8 @@ export function accountKeys({networkName, passPhrase, path}) {
       const network = getNetwork(networkName);
       let keyPair;
       if(privateKey){
-        keyPair = ECPair.fromPrivateKey(Buffer.from(privateKey), {network})
+        //make the private key 32 bytes
+        keyPair = ECPair.fromPrivateKey(Buffer.from(privateKey, "hex"), {network})
       }else if(wif){
         keyPair = ECPair.fromWIF(wif, network)
       }
@@ -106,7 +107,8 @@ export function accountKeys({networkName, passPhrase, path}) {
         return {
           address: addressDetails.address,
           addressType: x,
-          scriptType: getAddressType({address:addressDetails.address, networkName:networkName})
+          scriptType: getAddressType({address:addressDetails.address, networkName:networkName}),
+          publicKey: addressDetails.publicKey.toString("hex")
         }
       })
 
@@ -287,8 +289,9 @@ export function accountKeys({networkName, passPhrase, path}) {
     }
   }
   
-  function getPsbtDetails ({networkName, input, output}){
+  export function getPsbtDetails ({networkName, input, output}){
     try{
+      console.log(input, output)
       let psbt = new Psbt({network: getNetwork(networkName)})
       .addInputs(input)
       .addOutputs(output)
@@ -360,17 +363,40 @@ export function accountKeys({networkName, passPhrase, path}) {
       }
     
     }catch(e){
+      console.log(e.message)
       throw new Error(e.message)
     }
   }
 
-  export function signTransaction2 ({psbt, networkName, privateKey,wif, addressType}) {
+  export async function addInputToPsbt ({psbt, networkName, addressType, input, publicKey}) {
+    try{
+      const network = getNetwork(networkName)
+      let pubKey = hexToBuffer(publicKey);
+      if(psbt.psbtHex){
+        let psbtData = Psbt.fromHex(psbt.psbtHex, {network})
+        let inputData = await getInputData(addressType, input, networkName, pubKey)
+        psbtData.addInputs(inputData)
+        return {psbtHex: psbtData.toHex(), psbtBase64: psbtData.toBase64()}
+      }
+      if(psbt.psbtBase64){
+        let psbtData = Psbt.fromBase64(psbt.psbtBase64, {network})
+        let inputData = await getInputData(addressType, input, networkName, pubKey)
+        psbtData.addInputs(inputData)
+        return {psbtHex: psbtData.toHex(), psbtBase64: psbtData.toBase64()}
+      }
+    }catch(e){
+      console.log(e)
+      throw new Error(e.message)
+    }
+  }
+
+  export function signTransaction2 ({psbt, networkName, privateKey, wif, addressType, index}) {
     try{
       const network = getNetwork(networkName)
       let keyPair;
       let publicKey;
       if(privateKey){
-        keyPair = ECPair.fromPrivateKey(Buffer.from(privateKey), {network})
+        keyPair = ECPair.fromPrivateKey(Buffer.from(privateKey, "hex"), {network})
         publicKey = createAddress({privateKey: privateKey, networkName: networkName, addressType: addressType}).publicKey
       }else if(wif){
         keyPair = ECPair.fromWIF(wif, network)
@@ -380,23 +406,22 @@ export function accountKeys({networkName, passPhrase, path}) {
         keyPair = tweakSigner(keyPair, network)
       }
       
-      let psbtData = Psbt.fromBase64(psbt.psbtBase64, {network})
-      if(addressType !== 'taproot' || addressType !== 'segwit'){
-        psbtData.signAllInputs(keyPair)
-        psbtData.finalizeAllInputs()
-        return {txHex: psbtData.extractTransaction().toHex(), signedTransaction: psbtData.extractTransaction()}
+      let psbtData 
+      if(psbt.psbtBase64){
+        psbtData = Psbt.fromBase64(psbt.psbtBase64, {network})
+      }else if(psbt.psbtHex){
+        psbtData = Psbt.fromHex(psbt.psbtHex, {network})
       }
 
-      psbtData.data.inputs.map((input, index) => {
-        let n_publicKey = buf2hex(input.witnessUtxo.script).slice(buf2hex(input.witnessUtxo.script).length - 64)
-        if(n_publicKey === buf2hex(publicKey)){
-          psbtData.signInput(index, keyPair)
-          psbtData.finalizeInput(index)
-        }
-      });
-      return {txHex: psbtData.extractTransaction().toHex(), signedTransaction: psbtData.extractTransaction()}
+      console.log(psbtData)
+
+      psbtData.signInput(index, keyPair)
+      psbtData.finalizeInput(index)
+
+      return {psbtHex: psbtData.toHex(), psbtBase64: psbtData.toBase64()}
     }catch(e){
-      throw new Error(e.message)
+      console.log(e)
+      throw new Error(e.message)  
     }
   }
   

@@ -24,10 +24,10 @@ import {
   getAddressEncoding,
   getInscriptions,
   getKeyPair,
-  getInitData,
   splitFunds,
   createInscribeTransactions,
-  getInscriptionCost
+  getInscriptionCost,
+  getInitData2
 } from "./bitcoin/inscription.js"
 
 const qip_wallet = {
@@ -56,9 +56,9 @@ const inscription = {
   getAddressEncoding,
   getInscriptions,
   getKeyPair,
-  getInitData,
   splitFunds,
   createInscribeTransactions,
+  getInitData2,
   getInscriptionCost
 }
 
