@@ -291,7 +291,6 @@ export function accountKeys({networkName, passPhrase, path}) {
   
   export function getPsbtDetails ({networkName, input, output}){
     try{
-      console.log(input, output)
       let psbt = new Psbt({network: getNetwork(networkName)})
       .addInputs(input)
       .addOutputs(output)
@@ -412,8 +411,6 @@ export function accountKeys({networkName, passPhrase, path}) {
       }else if(psbt.psbtHex){
         psbtData = Psbt.fromHex(psbt.psbtHex, {network})
       }
-
-      console.log(psbtData)
 
       psbtData.signInput(index, keyPair)
       psbtData.finalizeInput(index)
