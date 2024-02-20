@@ -357,12 +357,12 @@ const _getInscription = ({files, publicKey, networkName, feerate, padding, optio
        let script = [];
        let script_backup = [];
 
-       let extra_bytes = 0;
+       let extra_bytes = 80;
        if(options && options.metadata){
            const scriptData = createInscriptionScript({pubkey: pubkey, mimetype: mimetype, data: data, metadata: options.metadata})
            script = scriptData.script;
            script_backup = scriptData.script_backup;
-           extra_bytes = 80
+           extra_bytes += 80
        }else{
            const scriptData = createInscriptionScript({pubkey: pubkey, mimetype: mimetype, data: data})
            script = scriptData.script;
@@ -415,7 +415,7 @@ const getBatchInscription = async ({publicKey, networkName, feerate, padding, op
            pad = padding
        }
 
-       let extra_bytes = 0
+       let extra_bytes = 80;
 
        const files = options.batch.data.map(x => x.file)
        let _file = await getFileData(files)
@@ -513,7 +513,7 @@ export const getInscriptionCost = ({fileSizes, feerate, padding, options}) => {
            outputCount += 1
        }
 
-       let extra_bytes = 0
+       let extra_bytes = 80
        if(options && options.batch){
            if(options.batch.parent) inputs += 1, outputCount += 1
            let totalSize = 0
@@ -1464,7 +1464,7 @@ function sleep(ms) {
 
 // console.log(getInscriptionCost({
 //     fileSizes: [472, 490], 
-//     feerate: feeRate, 
+//     feerate: 5 || feeRate, 
 //     padding: 550, 
 //     options: options
 // }))
