@@ -1,6 +1,6 @@
 {
   "name": "qip-wallet",
-  "version": "1.1.12",
+  "version": "1.1.14",
   "description": "qip-wallet-lib provides set of tools for working with Bitcoin transactions and keys. It is written in javascript and works in node.js enviroment",
   "main": "index.js",
   "type": "module",
@@ -22,6 +22,7 @@
     "bitcore-mnemonic": "^10.0.0",
     "browserify-fs": "^1.0.0",
     "cbor": "^9.0.2",
+    "crypto": "^1.0.1",
     "ecpair": "^2.1.0",
     "ethers": "^5.7.2",
     "filereader": "^0.10.3",

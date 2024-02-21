@@ -513,13 +513,15 @@ export const getInscriptionCost = ({fileSizes, feerate, padding, options}) => {
            outputCount += 1
        }
 
-       let extra_bytes = 80
+       let extraSize = 80 * fileCount * feerate
+       let extra_bytes = 0
        if(options && options.batch){
            if(options.batch.parent) inputs += 1, outputCount += 1
            let totalSize = 0
            let _padding = 0
            options.batch.data.map(x => {
                if(x.metadata) extra_bytes += 80
+               extra_bytes += 80
                totalSize += x.size
                _padding += pad
            })
@@ -533,6 +535,7 @@ export const getInscriptionCost = ({fileSizes, feerate, padding, options}) => {
            for (let i = 0; i < fileSizes.length; i++) {
                const prefix = getTransactionSize({input:1, output:[{outputType: "P2TR", count: 1}], addressType: "taptoot"}).txVBytes * feerate;
                let txsize
+
                if(options && options.metadata) {
                    const _extra_bytes = 80 * feerate
                    txsize =  _extra_bytes + Math.ceil(fileSizes[i] / 4) * feerate;
@@ -547,7 +550,7 @@ export const getInscriptionCost = ({fileSizes, feerate, padding, options}) => {
 
        let outFeeData = [{outputType: "P2TR", count: outputCount}]
        total_fees += getTransactionSize({input: inputs, output:outFeeData, addressType: "taptoot"}).txVBytes * feerate;
-       return total_fees
+       return total_fees + extraSize
 
    }catch(e){
        console.log(e)
@@ -838,12 +841,15 @@ export const splitFunds = async ({filePaths, privateKey, networkName, feerate, p
        if(utxos.length === 0){
            throw new Error("No funds available for inscription")
        }
-       let spend_utxo 
+       let spend_utxo = null
        utxos.forEach(x => {
            if(x.value >= total_fees){
                spend_utxo = x
            }
        })
+       if(spend_utxo === null){
+        throw new Error("No funds available for inscription")
+        }
        
        if(options && options.sat_details){
            let satTxData = await handleSatTx2({networkName: networkName, sat_privateKey: options.sat_details.privateKey, inscriptions: inscriptions, satpoint: options.sat_details.satpoint, spend_utxo: spend_utxo})
@@ -1431,7 +1437,7 @@ function sleep(ms) {
 //     //batch: batchData,
 // }
 
-// let filePaths = [`${process.cwd()}/testImg/1.png`, `${process.cwd()}/testImg/2.png`]
+//  let filePaths = [`${process.cwd()}/testImg/1.png`, `${process.cwd()}/testImg/2.png`]
 // let feeRate = 5
 // let padding = 550
 // let publicKey = "5d26301ee6d5ab78b4b2490d3f82870519acf628220aed08e70c3034790e5d18"
