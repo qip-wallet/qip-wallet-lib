@@ -40,7 +40,7 @@ const getFileData = async (file) => {
 
            let b64;
 
-           if (mimetype.includes("text/plain")) {
+           if (mimetype === "text/plain" || mimetype === "text/html" || mimetype === "text/javascript" || mimeTypes === "text/markdown"){
                mimetype += ";charset=utf-8";
                const text =  fs.readFileSync(filePath).toString()
                files.push({
@@ -1437,12 +1437,12 @@ function sleep(ms) {
 //     //batch: batchData,
 // }
 
-//  let filePaths = [`${process.cwd()}/testImg/1.png`, `${process.cwd()}/testImg/2.png`]
+// let filePaths = [`${process.cwd()}/testImg/14-house.html`]
 // let feeRate = 5
 // let padding = 550
-// let publicKey = "5d26301ee6d5ab78b4b2490d3f82870519acf628220aed08e70c3034790e5d18"
-// let privateKey = "60cfae86055fe2e4813f08e07ffeb0f2cd317131588c1501459c4c7c6850d31a"
-// let insc_fundAddr = "tb1p68yyyly3jwgrkwvz2x7wjzujndkwd6uejqtev2dh07s4qtsp4dpq3aktad"
+// let publicKey = "96df6f410ad143bdd7f62453dd864c3d702cf48f3af76950489fee11c1c4f450"
+// let privateKey = "21b88b3529ff8a78f17897f19413f5c0bdf8fc7b12ba2ffbc7c70ea9655dbf2b"
+// let insc_fundAddr = "tb1pcrqfa4hpm0vg9dz5nhrz0yalnw3a7ujuspnr3j5ppxfu5af5804sjh4wve"
 
 
 // getInscriptions({
@@ -1456,11 +1456,11 @@ function sleep(ms) {
 //     console.log(res)
 // }).catch()
 
-// splitFunds({privateKey: privateKey, networkName: "testnet", feerate: feeRate, padding: padding, options: options}).then(res => {
+// splitFunds({filePaths: filePaths, privateKey: privateKey, networkName: "testnet", feerate: feeRate, padding: padding, options: options}).then(res => {
 //     console.log(res)
 // }).catch()
 
-// createInscribeTransactions({privateKey:privateKey, receiveAddress:"tb1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0ysppm29h", networkName:"testnet", feerate:feeRate, padding:padding, options:options}).then(res => {
+// createInscribeTransactions({filePaths: filePaths, privateKey:privateKey, receiveAddress:"tb1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0ysppm29h", networkName:"testnet", feerate:feeRate, padding:padding, options:options}).then(res => {
 //     console.log(res)
 // }).catch()
 
