@@ -1437,7 +1437,7 @@ function sleep(ms) {
 //     //batch: batchData,
 // }
 
-// let filePaths = [`${process.cwd()}/testImg/14-house.html`]
+// let filePaths = [`${process.cwd()}/testImg/1.png`]
 // let feeRate = 5
 // let padding = 550
 // let publicKey = "96df6f410ad143bdd7f62453dd864c3d702cf48f3af76950489fee11c1c4f450"

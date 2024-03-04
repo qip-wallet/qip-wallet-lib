@@ -6,6 +6,7 @@ import {
     crypto,
     payments,
     Psbt,
+    script,
     Transaction
 } from "bitcoinjs-lib";
 import * as tinysecp from "tiny-secp256k1";
@@ -13,6 +14,8 @@ import  { ECPairFactory } from "ecpair";
 import mempoolJS from "@mempool/mempool.js";
 import {bech32m, bech32} from 'bech32';
 import QRCode from 'qrcode'
+import { Address } from '@cmdcode/tapscript'
+import axios from "axios";
 
 
 
@@ -152,6 +155,12 @@ export function accountKeys({networkName, passPhrase, path}) {
   //Transaction Methods
   export async function getUtxo ({networkName, address}){
     try{
+      if(address === undefined) throw new Error("address is required")
+      if(networkName === undefined) throw new Error("network name is required")
+      if(networkName !== "mainnet" && networkName !== "testnet") throw new Error("invalid network name")
+      if(networkName === "mainnet"){
+        return await _getUtxo({address:address})
+      }
       const { addresses } = await init(networkName);
       let response = await addresses.getAddressTxsUtxo({ address: address });
       let utxos = response.map(x => {
@@ -164,6 +173,28 @@ export function accountKeys({networkName, passPhrase, path}) {
       return utxos
     }catch(e){
       throw new Error(e.message)
+    }
+  }
+
+  const _getUtxo = async ({address}) => {
+    try{
+      const result = await axios.get(`https://blockchain.info/unspent?active=${address}`);
+      let n_utxo = result.data.unspent_outputs
+      n_utxo = n_utxo.map(x => {
+        
+        return {
+          txid: x.tx_hash_big_endian,
+          vout: x.tx_output_n,
+          status: {
+            confirmed: x.confirmations >= 1 ? true : false
+          },
+          value: x.value
+        }
+      })
+      return n_utxo;
+      
+    }catch(e){
+      console.log(e);
     }
   }
 
@@ -422,53 +453,63 @@ export function accountKeys({networkName, passPhrase, path}) {
     }
   }
   
-  //input = [{txid: "", vout: 2, value: 20000}, {txid: "", vout: 0, value: 20000}]
+   //input = [{txid: "", vout: 2, value: 20000}, {txid: "", vout: 0, value: 20000}]
  export async function getInputData(addressType, input, networkName, publicKey){
-    try{
-      let{transactions} = await init(networkName)
-      let inData;
-      let inputTx = await Promise.all(input.map(async(item)=>{
-        return {tx: await transactions.getTx({txid:item.txid}), vout: item.vout}
-      }))
-      
-      switch (addressType){
-        case "legacy":
-          let tx = await Promise.all(input.map(async(x)=>{
-            return {txHex: Buffer.from(await transactions.getTxHex({txid:x.txid}), "hex"), hash: x.txid, index:x.vout}
-          }))
-          inData = tx.map(async (x) =>{
-            return {
-              hash:x.hash,
-              index:x.index,
-              nonWitnessUtxo: x.txHex
-            }
-          })
-          break
-        case "segwit":
-          inData = inputTx.map((x) =>{
-            return {
-              hash:x.tx.txid,
-              index:x.vout,
-              witnessUtxo: {value: x.tx.vout[x.vout].value, script: Buffer.from(x.tx.vout[x.vout].scriptpubkey, "hex")}
-            }
-          })
-          break
-        case "taproot":
-          inData = inputTx.map((x) =>{
-            return {
-              hash:x.tx.txid,
-              index:x.vout,
-              witnessUtxo: {value: x.tx.vout[x.vout].value, script: Buffer.from(x.tx.vout[x.vout].scriptpubkey, "hex")},
-              tapInternalKey: publicKey
-            }
-          })
-          break
-      }
-      return inData
-    }catch(e){
-
+  try{
+    let{transactions} = await init(networkName)
+    let inData;
+    let url
+    if(networkName === "mainnet"){
+      url = "https://blockstream.info/api/tx/"
     }
+    if(networkName === "testnet"){
+      url = "https://blockstream.info/testnet/api/tx/"
+    }
+
+    let _inputTx = await Promise.all(input.map(async(item, index)=>{
+      let tx = await axios.get(`${url}/${item.txid}`)
+      tx = tx.data
+      return {tx: tx, vout: item.vout}
+    }))
+    
+    switch (addressType){
+      case "legacy":
+        let tx = await Promise.all(input.map(async(x)=>{
+          return {txHex: Buffer.from(await transactions.getTxHex({txid:x.txid}), "hex"), hash: x.txid, index:x.vout}
+        }))
+        inData = tx.map(async (x) =>{
+          return {
+            hash:x.hash,
+            index:x.index,
+            nonWitnessUtxo: x.txHex
+          }
+        })
+        break
+      case "segwit":   
+        inData = _inputTx.map((x) =>{
+          return {
+            hash:x.tx.txid,
+            index:x.vout,
+            witnessUtxo: {value: x.tx.vout[x.vout].value, script: Buffer.from(x.tx.vout[x.vout].scriptpubkey, "hex")},
+          }
+        })
+        break
+      case "taproot":
+        inData = _inputTx.map((x) =>{
+          return {
+            hash:x.tx.txid,
+            index:x.vout,
+            witnessUtxo: {value: x.tx.vout[x.vout].value, script: Buffer.from(x.tx.vout[x.vout].scriptpubkey, "hex")},
+            tapInternalKey: publicKey
+          }
+        })
+        break
+    }
+    return inData
+  }catch(e){
+
   }
+}
 
   //output = [{outputType: "P2TR", count: 2}, {outputType: "P2PKH", count: 2}]
  export function getTransactionSize ({input, output, addressType}){
