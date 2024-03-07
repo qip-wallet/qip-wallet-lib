@@ -1,7 +1,7 @@
 import crypto from "crypto"
 import FileReader from 'filereader'
 import mimeTypes from 'mime-types'
-   import cbor from 'cbor'
+import cbor from 'cbor'
 import path from 'path'
 import atob from "atob"
 import fs from "fs"
@@ -31,6 +31,7 @@ const getFileData = async (file) => {
            let filePath = file[i]
            let fileSize = fs.readFileSync(filePath).length
            let mimetype = getMimeType(path.extname(file[i]));
+           if(!mimetype) throw new Error ("file type not supported: ", path.extname(file[i]))
 
            let _file = {name: filename, path: filePath, size:fileSize, type:mimetype }
 
@@ -202,12 +203,12 @@ const createBatchInscriptionScript = ({pubkey, inscriptionData}) => {
        let spriptHeader = [pubkey, 'OP_CHECKSIG']
        let scriptBackupHeader = ['0x' + buf2hex(pubkey.buffer), 'OP_CHECKSIG']
        
-       inscriptionData.map(x => {
+       inscriptionData.map((x, index) => {
            const data = hexToBytes(x.fileData.hex)
            const mimetype = ec.encode(x.fileData.mimetype);
            if(!x.metadata){
-               script.push('OP_0', 'OP_IF', ec.encode('ord'), '01', mimetype, 'OP_0', data, 'OP_ENDIF')
-               script_backup.push('OP_0', 'OP_IF', '0x' + buf2hex(ec.encode('ord')), '01', '0x' + buf2hex(mimetype), 'OP_0', '0x' + buf2hex(data), 'OP_ENDIF')
+               script.push('OP_0', 'OP_IF', ec.encode('ord'), '01', mimetype,'02', index.toString(16), 'OP_0', data, 'OP_ENDIF')
+               script_backup.push('OP_0', 'OP_IF', '0x' + buf2hex(ec.encode('ord')), '01', '0x' + buf2hex(mimetype), '02', '0x' + index.toString(16), 'OP_0', '0x' + buf2hex(data), 'OP_ENDIF')
            }else{
                script.push('OP_0', 'OP_IF', ec.encode('ord'), '01', mimetype, '05', Uint8Array.from(covertJsonToCbor(x.metadata)), 'OP_0', data, 'OP_ENDIF')
                script_backup.push('OP_0', 'OP_IF', '0x' + buf2hex(ec.encode('ord')), '01', '0x' + buf2hex(mimetype), '05', '0x' + buf2hex(Uint8Array.from(covertJsonToCbor(x.metadata))), 'OP_0', '0x' + buf2hex(data), 'OP_ENDIF')
@@ -1374,7 +1375,7 @@ async function fileToSha256Hex(file) {
 
 function getMimeType(fileExtension) {
    const mimeType = mimeTypes.lookup(fileExtension);
-   return mimeType || 'application/octet-stream'; // Default to binary data if MIME type is not found
+   return mimeType
 }
 
 function waitSomeSeconds(number) {
