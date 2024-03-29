@@ -109,77 +109,146 @@ export const getKeyPair = ({privateKey}) => {
    }
 }
 
-const createInscriptionScript = ({pubkey, mimetype, data, metadata}) => {
+const createInscriptionScript = ({pubkey, mimetype, data, metadata, deligate}) => {
    try{
        const ec = new TextEncoder();
-       if(!pubkey || !mimetype || !data){
-           throw new Error ("pubkey, mimetype, and data are required to create an inscription script. Received: ", pubkey, mimetype, data)
+       if(!pubkey){
+           throw new Error ("pubkey, mimetype, and data are required to create an inscription script. Received: ", pubkey)
        }
        
-       let script = [];
+       let script = [ 
+            pubkey,
+            'OP_CHECKSIG',
+            'OP_0',
+            'OP_IF',
+            ec.encode('ord'),
+        ];
        let script_backup = [];
-       if(!metadata){
-           script = [ 
-               pubkey,
-               'OP_CHECKSIG',
-               'OP_0',
-               'OP_IF',
-               ec.encode('ord'),
-               '01',
-               mimetype,
-               'OP_0',
-               data,
-               'OP_ENDIF'
-           ];
 
-           script_backup = [
-               '0x' + buf2hex(pubkey.buffer),
-               'OP_CHECKSIG',
-               'OP_0',
-               'OP_IF',
-               '0x' + buf2hex(ec.encode('ord')),
-               '01',
-               '0x' + buf2hex(mimetype),
-               'OP_0',
-               '0x' + buf2hex(data),
-               'OP_ENDIF'
-           ];
+       if(deligate){
+            if(!deligate.id) throw new Error ("deligate id is required")
+            const deligateData = getDeligateData(deligate.id)
+            let deligateScript = []
+            if(!deligate.fileType){
+                const deligateData = getDeligateData(deligate.id)
+                deligateScript = ['0b', deligateData.serilizedId]
+            }else{
+                let mimetype = getMimeType(deligate.fileType);
+                if(!mimetype) throw new Error ("file type not supported: ", deligate.fileType)
+                if(mimetype === "text/plain" || mimetype === "text/html" || mimetype === "text/javascript" || mimetype === "text/markdown"){
+                    mimetype += ";charset=utf-8";
+                }
+                deligateScript = ['01', ec.encode(mimetype), '0b', deligateData.serilizedId]
+            }
+            script = script.concat(deligateScript)
+            if(metadata){
+                const metadataScript = ['05', Uint8Array.from(covertJsonToCbor(metadata))]
+                script = script.concat(metadataScript)
+            }
+        }else{
+            if(!mimetype){
+                throw new Error ("mimetype is required to create an inscription script. Received: ", mimetype)
+            }
+            if(!data){
+                throw new Error ("data is required to create an inscription script. Received: ", data)
+            }
+            if(metadata){
+                const metadataScript = ['05', Uint8Array.from(covertJsonToCbor(metadata))]
+                script = script.concat(metadataScript)
+            }
+            const dataScript = ['01', mimetype, 'OP_0', data]
+            script = script.concat(dataScript)
+        }
+        script.push('OP_ENDIF')
 
-           return {
-               script: script,
-               script_backup: script_backup
-           }
-       }
+        
+    //    if(deligate){
+    //         script = [
+    //             pubkey,
+    //             'OP_CHECKSIG',
+    //             'OP_0',
+    //             'OP_IF',
+    //             ec.encode('ord'),
+    //             '11',
+    //             //add the serilized deligate id
+    //             'OP_ENDIF'
+    //         ];
 
-       script = [
-           pubkey,
-           'OP_CHECKSIG',
-           'OP_0',
-           'OP_IF',
-           ec.encode('ord'),
-           '01',
-           mimetype,
-           '05',
-           Uint8Array.from(covertJsonToCbor(metadata)), //CBOR
-           'OP_0',
-           data,
-           'OP_ENDIF'
-       ];
+    //         script_backup = [
+    //             '0x' + buf2hex(pubkey.buffer),
+    //             'OP_CHECKSIG',
+    //             'OP_0',
+    //             'OP_IF',
+    //             '0x' + buf2hex(ec.encode('ord')),
+    //             'OP_ENDIF'
+    //         ];
+    //         return {
+    //         script: script,
+    //         script_backup: script_backup
+    //         }
+    //    }
+       
+    //    if(metadata){
+    //         script = [
+    //             pubkey,
+    //             'OP_CHECKSIG',
+    //             'OP_0',
+    //             'OP_IF',
+    //             ec.encode('ord'),
+    //             '01',
+    //             mimetype,
+    //             '05',
+    //             Uint8Array.from(covertJsonToCbor(metadata)), //CBOR
+    //             'OP_0',
+    //             data,
+    //             'OP_ENDIF'
+    //         ];
 
-       script_backup = [
-           '0x' + buf2hex(pubkey.buffer),
-           'OP_CHECKSIG',
-           'OP_0',
-           'OP_IF',
-           '0x' + buf2hex(ec.encode('ord')),
-           '01',
-           '0x' + buf2hex(mimetype),
-           '05',
-           '0x' + buf2hex(Uint8Array.from(covertJsonToCbor(metadata))), //CBOR
-           'OP_0',
-           '0x' + buf2hex(data),
-           'OP_ENDIF'
-       ];
+    //         script_backup = [
+    //             '0x' + buf2hex(pubkey.buffer),
+    //             'OP_CHECKSIG',
+    //             'OP_0',
+    //             'OP_IF',
+    //             '0x' + buf2hex(ec.encode('ord')),
+    //             '01',
+    //             '0x' + buf2hex(mimetype),
+    //             '05',
+    //             '0x' + buf2hex(Uint8Array.from(covertJsonToCbor(metadata))), //CBOR
+    //             'OP_0',
+    //             '0x' + buf2hex(data),
+    //             'OP_ENDIF'
+    //         ];
+    //        return {
+    //            script: script,
+    //            script_backup: script_backup
+    //        }
+    //    }
+
+    //    script = [ 
+    //         pubkey,
+    //         'OP_CHECKSIG',
+    //         'OP_0',
+    //         'OP_IF',
+    //         ec.encode('ord'),
+    //         '01',
+    //         mimetype,
+    //         'OP_0',
+    //         data,
+    //         'OP_ENDIF'
+    //     ];
+
+    //     script_backup = [
+    //         '0x' + buf2hex(pubkey.buffer),
+    //         'OP_CHECKSIG',
+    //         'OP_0',
+    //         'OP_IF',
+    //         '0x' + buf2hex(ec.encode('ord')),
+    //         '01',
+    //         '0x' + buf2hex(mimetype),
+    //         'OP_0',
+    //         '0x' + buf2hex(data),
+    //         'OP_ENDIF'
+    //     ];
 
        return {
            script: script,
@@ -204,15 +273,49 @@ const createBatchInscriptionScript = ({pubkey, inscriptionData}) => {
        let scriptBackupHeader = ['0x' + buf2hex(pubkey.buffer), 'OP_CHECKSIG']
        
        inscriptionData.map((x, index) => {
-           const data = hexToBytes(x.fileData.hex)
-           const mimetype = ec.encode(x.fileData.mimetype);
-           if(!x.metadata){
-               script.push('OP_0', 'OP_IF', ec.encode('ord'), '01', mimetype,'02', index.toString(16), 'OP_0', data, 'OP_ENDIF')
-               script_backup.push('OP_0', 'OP_IF', '0x' + buf2hex(ec.encode('ord')), '01', '0x' + buf2hex(mimetype), '02', '0x' + index.toString(16), 'OP_0', '0x' + buf2hex(data), 'OP_ENDIF')
-           }else{
-               script.push('OP_0', 'OP_IF', ec.encode('ord'), '01', mimetype, '05', Uint8Array.from(covertJsonToCbor(x.metadata)), 'OP_0', data, 'OP_ENDIF')
-               script_backup.push('OP_0', 'OP_IF', '0x' + buf2hex(ec.encode('ord')), '01', '0x' + buf2hex(mimetype), '05', '0x' + buf2hex(Uint8Array.from(covertJsonToCbor(x.metadata))), 'OP_0', '0x' + buf2hex(data), 'OP_ENDIF')
-           }
+            let _script = ['OP_0', 'OP_IF', ec.encode('ord')]
+           //the pointer should be in little endian with trailing zeros ignored
+           const little_endian = toLittleEndian(index)
+           let pointer =  Uint8Array.from(bytesToHex(little_endian).replace(/00/g, ''))
+
+           let pointerScript = []
+           
+            pointerScript = ['02', pointer]
+            _script = _script.concat(pointerScript)
+           
+           if(x.deligate){
+                if(!x.deligate.id) throw new Error ("deligate id is required")
+                if(!x.deligate.fileType) throw new Error ("deligate fileType is required")
+                let mimetype = getMimeType(x.deligate.fileType);
+                if(!mimetype) throw new Error ("file type not supported: ", x.deligate.fileType)
+                if(mimetype === "text/plain" || mimetype === "text/html" || mimetype === "text/javascript" || mimetype === "text/markdown"){
+                    mimetype += ";charset=utf-8";
+                }
+                const deligateData = getDeligateData(x.deligate.id)
+                const deligateScript = ['01', ec.encode(mimetype), '0b', deligateData.serilizedId]
+                _script = _script.concat(deligateScript)
+                if(x.metadata){
+                    const metadataScript = ['05', Uint8Array.from(covertJsonToCbor(x.metadata))]
+                    _script = _script.concat(metadataScript)
+                }    
+            }else{
+                const data = hexToBytes(x.fileData.hex)
+                const mimetype = ec.encode(x.fileData.mimetype);
+                if(x.metadata){
+                    const metadataScript = ['05', Uint8Array.from(covertJsonToCbor(x.metadata))]
+                    _script = _script.concat(metadataScript)
+                }
+    
+                if(data){
+                    if(!mimetype){
+                        throw new Error ("mimetype is required to create an inscription script. Received: ", mimetype)
+                    }
+                    const dataScript = ['01', mimetype, 'OP_0', data]
+                    _script = _script.concat(dataScript)
+                }
+            }
+            _script.push('OP_ENDIF')
+            script = script.concat(_script)
        })
        // add the header to the script
        script = spriptHeader.concat(script)
@@ -222,7 +325,7 @@ const createBatchInscriptionScript = ({pubkey, inscriptionData}) => {
 
    }catch(e){
        console.log(e)
-       throw new Error(e.message)
+       return {status: false, message: e.message}
    }
 }
 
@@ -337,13 +440,9 @@ export const getInitData2 = ({privateKey, networkName}) => {
 const _getInscription = ({files, publicKey, networkName, feerate, padding, options}) => {
    try{
        const ec = new TextEncoder();
-       if(!files) throw new Error ("files is required")
-       if(!feerate) throw new Error ("feerate is required")
-       if(!publicKey) throw new Error ("publicKey is required")
-       if(!networkName) throw new Error ("networkName is required")
-       const hex = files.hex;
-       const data = hexToBytes(hex);
-       const mimetype = ec.encode(files.mimetype);
+       if(!publicKey) return {status: false, message: "publicKey is required"}
+       if(!feerate) return {status: false, message: "feerate is required"}
+       if(!networkName) return {status: false, message: "networkName is required"}
        
        let pubkey = hexToBytes(publicKey);
        let addressEncoding = getAddressEncoding({networkName: networkName})
@@ -358,17 +457,35 @@ const _getInscription = ({files, publicKey, networkName, feerate, padding, optio
        let script = [];
        let script_backup = [];
 
-       let extra_bytes = 80;
-       if(options && options.metadata){
-           const scriptData = createInscriptionScript({pubkey: pubkey, mimetype: mimetype, data: data, metadata: options.metadata})
-           script = scriptData.script;
-           script_backup = scriptData.script_backup;
-           extra_bytes += 80
-       }else{
-           const scriptData = createInscriptionScript({pubkey: pubkey, mimetype: mimetype, data: data})
-           script = scriptData.script;
-           script_backup = scriptData.script_backup;
-       }
+       let extra_bytes = 0;
+
+       let data;
+       if(options && options.deligate){
+            if(!options.deligate.id) return {status: false, message: "deligate id is required"} 
+            let scriptData;
+            if(options.metadata){
+                scriptData = createInscriptionScript({pubkey: pubkey, deligate: options.deligate, metadata: options.metadata})
+            }else{
+                scriptData = createInscriptionScript({pubkey: pubkey, deligate: options.deligate})
+            }
+            script = scriptData.script;
+            script_backup = scriptData.script_backup;
+            //extra_bytes += 80
+        }else{
+            if(!files) return {status: false, message: "files is required"}
+            const hex = files.hex;
+            data = hexToBytes(hex);
+            const mimetype = ec.encode(files.mimetype);
+            let scriptData;
+            if(options && options.metadata){
+                scriptData = createInscriptionScript({pubkey: pubkey, mimetype: mimetype, data: data, metadata: options.metadata})
+            }else{
+                scriptData = createInscriptionScript({pubkey: pubkey, mimetype: mimetype, data: data})
+            }
+            script = scriptData.script;
+            script_backup = scriptData.script_backup;
+            //extra_bytes += 80
+        }
 
        const leaf = Tap.encodeScript(script);
        const [tapkey, cblock] = Tap.getPubKey(pubkey, { target: leaf });
@@ -377,8 +494,13 @@ const _getInscription = ({files, publicKey, networkName, feerate, padding, optio
        const prefix = getTransactionSize({input:1, output:[{outputType: "P2TR", count: 1}], addressType: "taptoot"}).txVBytes * feerate;
 
        const _extra_bytes = extra_bytes * feerate
-       
-       const txsize = _extra_bytes + Math.ceil(data.length / 4) * feerate;
+      
+       let txsize = 0
+       if(options && options.deligate){
+            txsize = _extra_bytes + Math.ceil(0 / 4) * feerate;
+       }else{
+            txsize = _extra_bytes + Math.ceil(data.length / 4) * feerate;
+       }
        const fee = txsize + pad + prefix;
        
        return {
@@ -394,21 +516,20 @@ const _getInscription = ({files, publicKey, networkName, feerate, padding, optio
        }
        
    }catch(e){
-       throw new Error(e.message)
+    console.log(e)
+       throw new Error(e)
    }
 }
 
-const getBatchInscription = async ({publicKey, networkName, feerate, padding, options}) => {
+const getBatchInscription = async ({publicKey, networkName, feerate, padding, batch}) => {
    try{
        const ec = new TextEncoder();
-       if(!publicKey) throw new Error("publicKey is required")
-       if(!networkName) throw new Error("networkName is required")
-       if(!options || !options.batch) throw new Error ("batch data is required")
-       if(!options.batch.data || options.batch.data.length === 0) throw new Error ("batch data is required")
-       if(!feerate) throw new Error ("feerate is required")
+       if(!publicKey) return {status: false, message: "publicKey is required"}
+       if(!networkName) return {status: false, message: "networkName is required"}
+       if(!feerate) return {status: false, message: "feerate is required"}
+
        let pubkey = hexToBytes(publicKey);
        let addressEncoding = getAddressEncoding({networkName: networkName})
-
        let pad
        if(!padding || padding < 550){
            pad = 550
@@ -417,40 +538,60 @@ const getBatchInscription = async ({publicKey, networkName, feerate, padding, op
        }
 
        let extra_bytes = 80;
+       if(!batch) return {status: false, message: "batch data is required"}
+       if(!batch.data || batch.data.length === 0) return {status: false, message: "batch data is required"}
+        if(batch.parent) inputs += 1
 
-       const files = options.batch.data.map(x => x.file)
-       let _file = await getFileData(files)
-       let incs_file_data = _file.map((x, i) => {
-           if(options.batch.data[i].metadata) extra_bytes += 80
-           return {
-               fileData: x,
-               metadata: options.batch.data[i].metadata,
-               size: hexToBytes(x.hex).length,
-           }
-           
-       })
 
+        let totalSize = 0
+        let _padding = 0
+        let files = []
+        let data = {}
+        let incs_file_data = []
+        batch.data.map(x => {
+            let _data = {}
+            if(x.deligate){
+                if(!x.deligate.id) return {status: false, message: "deligate id is required"}
+                _data.deligate = x.deligate
+                _data.size = 0
+                totalSize += _data.size
+                _padding += pad
+                if(x.metadata){
+                    extra_bytes += 80
+                    _data.metadata = x.metadata;
+                }   
+                incs_file_data.push(_data)
+            }else{
+                files = batch.data.map(x => x.file)
+            }
+        })
+        
+        //This handles batch without deligate
+        let _file = await getFileData(files)
+        _file.map((x, i) => {
+            data.fileData = x;
+            data.size = hexToBytes(x.hex).length;
+            totalSize += data.size
+            _padding += pad
+            if(batch.data[i].metadata){
+                extra_bytes += 80
+                data.metadata = x.metadata
+            } 
+            incs_file_data.push(data)
+        })
+       
        const {script, script_backup} = createBatchInscriptionScript({pubkey: pubkey, inscriptionData: incs_file_data})
        const leaf = Tap.encodeScript(script);
        const [tapkey, cblock] = Tap.getPubKey(pubkey, { target: leaf });
        const inscriptionAddress = Address.p2tr.encode(tapkey, addressEncoding);
        
        let inputCount = 1
-       let prefix = getTransactionSize({input:inputCount, output:[{outputType: "P2TR", count:options.batch.data.length}], addressType: "taptoot"}).txVBytes * feerate;
-       let totalSize = 0
-       let _padding = 0
-       
-       incs_file_data.map(x => {
-           totalSize += x.size
-           _padding += pad
-       })
+       let prefix = getTransactionSize({input:inputCount, output:[{outputType: "P2TR", count: batch.data.length}], addressType: "taptoot"}).txVBytes * feerate;
        
        const _extra_bytes = extra_bytes * feerate
        let txsize = _extra_bytes + Math.ceil(totalSize/4) * feerate
-
        const fee = prefix + txsize + _padding;
-
-       
+    
        return {
            leaf: leaf,
            tapkey: tapkey,
@@ -464,156 +605,188 @@ const getBatchInscription = async ({publicKey, networkName, feerate, padding, op
        }
    }catch(e){
        console.log(e)
-       throw new Error(e.message)
+       return {status: false, message: e.message}
    }
 
 }
 
-export const getInscriptionCost = ({fileSizes, feerate, padding, options}) => {
-   try{
-       if(fileSizes && options.batch)throw new Error("fileSizes or batch data is required")
-       if(!fileSizes && !options.batch)throw new Error("fileSizes or batch data is required")
-       if(!feerate) throw new Error ("feerate is required")
+export const getInscriptionCost = ({fileSizes, feerate, padding, options, batch}) => {
+   try{ 
 
-       let pad
-       if(!padding || padding < 550){
-           pad = 550
-       }else{
-           pad = padding
-       }
+        let inputs = 1
+        let outputCount = 0 
+        let total_fees = 0
+        let fileCount = 0
+        let extra_bytes = 80
 
-       let inputs = 1
-       let outputCount = 0 
-       let total_fees = 0
+        if(options && options.deligate){
+            if(!options.deligate.id) return {status: false, message: "deligate id is required"}
+        }else{
+            if(!fileSizes && !batch) return {status: false, message: "fileSizes or batch data is required"}
+        }
+        if(!feerate) return {status: false, message: "feerate is required"}
+        let pad
+        if(!padding || padding < 550){
+            pad = 550
+        }else{
+            pad = padding
+        }
 
-       let fileCount = 0
-       if(fileSizes){
-           fileCount = fileSizes.length
-       }else{
-           fileCount = options.batch.data.length
-       }
-       if(fileCount === 0) throw new Error ("fileSizes or batch data is required")
+        if(batch){
+            let totalSize = 0
+            let _padding = 0
+            if(batch.data.length === 0) return {status: false, message: "batch data is empty"}
+            if(batch.parent) {
+                inputs += 1
+                outputCount += 1
+            }
+            batch.data.map(x => {
+                _padding += pad
+                if(x.metadata) extra_bytes += 80
+                if(x.deligate){
+                    totalSize += 0
+                }else{
+                    totalSize += x.size
+                } 
+            })
+            fileCount = batch.data.length
+            const _extra_bytes = extra_bytes * feerate
+            const prefix = getTransactionSize({input:1, output:[{outputType: "P2TR", count: fileCount}], addressType: "taptoot"}).txVBytes * feerate;
+            const txsize = _extra_bytes + Math.ceil(totalSize / 4) * feerate;
+            const fee = txsize + prefix + _padding;
+            total_fees += fee;
+            outputCount += fileCount
+        }else{
+            let txsize = 0
+            if(options && options.deligate){
+                txsize = Math.ceil(0 / 4) * feerate;
+                fileCount = 1
+            }else{
+                if(fileSizes.length === 0) return {status: false, message: "fileSizes is empty"}
+                fileCount = fileSizes.length
+                for (let i = 0; i < fileSizes.length; i++) {
+                    txsize = Math.ceil(fileSizes[i] / 4) * feerate;
+                }
+            }
 
-       if(options && options.sat_details) {
-           if(fileCount > 1 && !options.batch) throw new Error ("special sat can only be used on one file")
-           inputs += 1
-           outputCount += 1
-       }
+            for (let i = 0; i < fileCount; i++) {
+                const prefix = getTransactionSize({input:1, output:[{outputType: "P2TR", count: 1}], addressType: "taptoot"}).txVBytes * feerate;
+                if(options && options.metadata) {
+                    const _extra_bytes = 80 * feerate
+                    txsize =  _extra_bytes + txsize
+                }
+                const fee =  txsize + prefix + pad;
+                total_fees += fee;
+                outputCount += 1
+            } 
 
+            if(options && options.sat_details) {
+                inputs += 1
+                outputCount += 1
+            } 
+        }
+       if(fileCount === 0) return {status: false, message: "filesize of batch data is empty"}
        if(options && options.service_fee){
-           if(!options.service_address) throw new Error ("service_address is required to add a service fee")
+           if(!options.service_address) return {status: false, message: "service_address is required to add a service fee"}
            const prefix = getTransactionSize({input:1, output:[{outputType: "P2TR", count: 1}], addressType: "taptoot"}).txVBytes * feerate;
            total_fees += (options.service_fee) + prefix
            outputCount += 1
        }
 
        if(options && options.collection_fee){
-           if(!options.collection_address) throw new Error ("collection_address is required to add a collection fee")
+           if(!options.collection_address) return {status: false, message: "collection_address is required to add a collection fee"}
            const prefix = getTransactionSize({input:1, output:[{outputType: "P2TR", count: 1}], addressType: "taptoot"}).txVBytes * feerate;
            total_fees += (options.collection_fee) + prefix
            outputCount += 1
        }
-
-       let extraSize = 80 * fileCount * feerate
-       let extra_bytes = 0
-       if(options && options.batch){
-           if(options.batch.parent) inputs += 1, outputCount += 1
-           let totalSize = 0
-           let _padding = 0
-           options.batch.data.map(x => {
-               if(x.metadata) extra_bytes += 80
-               extra_bytes += 80
-               totalSize += x.size
-               _padding += pad
-           })
-           const _extra_bytes = extra_bytes * feerate
-           const prefix = getTransactionSize({input:1, output:[{outputType: "P2TR", count: fileCount}], addressType: "taptoot"}).txVBytes * feerate;
-           const txsize = _extra_bytes + Math.ceil(totalSize / 4) * feerate;
-           const fee = txsize + prefix + _padding;
-           total_fees += fee;
-           outputCount += fileCount
-       }else{
-           for (let i = 0; i < fileSizes.length; i++) {
-               const prefix = getTransactionSize({input:1, output:[{outputType: "P2TR", count: 1}], addressType: "taptoot"}).txVBytes * feerate;
-               let txsize
-
-               if(options && options.metadata) {
-                   const _extra_bytes = 80 * feerate
-                   txsize =  _extra_bytes + Math.ceil(fileSizes[i] / 4) * feerate;
-               }else{
-                   txsize = Math.ceil(fileSizes[i] / 4) * feerate;
-               }
-               const fee =  txsize + prefix + pad;
-               total_fees += fee;
-               outputCount += 1
-           }  
-       }
-
+       
+        let extraSize = 80 * fileCount * feerate
        let outFeeData = [{outputType: "P2TR", count: outputCount}]
-       total_fees += getTransactionSize({input: inputs, output:outFeeData, addressType: "taptoot"}).txVBytes * feerate;
-       return total_fees + extraSize
-
+       const totalSize = getTransactionSize({input: inputs, output:outFeeData, addressType: "taptoot"}).txVBytes * feerate;
+       //add extra size to the total fees
+       total_fees += totalSize + extraSize
+       return total_fees
    }catch(e){
        console.log(e)
-       throw new Error(e.message)
+        return {status: false, message: e.message}
    }
 }
 
-export const getInscriptions = async ({filePaths, publicKey, networkName, feerate, padding, options}) => {
+export const getInscriptions = async ({filePaths, publicKey, networkName, feerate, padding, options, batch}) => {
    try{ 
-       
-       if(filePaths && options.batch)throw new Error("filePaths or batch data is required")
-       if(!filePaths && !options.batch)throw new Error("filePaths or batch data is required")
-   
-       if(!publicKey) throw new Error("publicKey is required")
-       if(!networkName) throw new Error("networkName is required")
-       if(!feerate) throw new Error("feerate is required")
 
-       let inscriptions = [];
-       let inputs = 1
-       let outputCount = 0
-       let total_fees = 0
+        let inscriptions = [];
+        let inputs = 1
+        let outputCount = 0
+        let total_fees = 0
+        let fileCount = 0
 
-       if(options && options.sat_details){
-           if(typeof options.sat_details.privateKey !== "string") throw new Error ("sat_privateKey must be a string")
-           inputs += 1
-           outputCount += 1
-       }
+        if(options && options.deligate){
+            if(!options.deligate.id) return {status: false, message: "deligate id is required"}
+        }
+        if(options && options.sat_details) {
+            inputs += 1
+            outputCount += 1
+        } 
+       if(!publicKey) return {status: false, message: "publicKey is required"}
+       if(!networkName) return {status: false, message: "networkName is required"}
+       if(!feerate) return {status: false, message: "feerate is required"}
 
-       if(options && options.batch){
-           if(!options.batch.data || options.batch.data.length === 0)  throw new Error("batch data is required")
-           if(options.batch.parent) inputs += 1
-           let inscData = await getBatchInscription({publicKey: publicKey, networkName: networkName, feerate: feerate, padding: padding, options: options})
+       if(batch){
+           if(!batch.data || batch.data.length === 0)  return {status: false, message: "batch data is required"}
+           if(batch.parent) inputs += 1
+           let inscData = await getBatchInscription({publicKey: publicKey, networkName: networkName, feerate: feerate, padding: padding, batch: batch})
            inscriptions.push(inscData)
            total_fees += inscData.fee
-           outputCount += options.batch.data.length
+           
+           fileCount = batch.data.length
+           outputCount += batch.data.length
        }else{
-           let files = await getFileData(filePaths)
-           if(files.length > 1 && options.sat_details) throw new Error (`inscription on special sat can only be done on one file, you have ${files.length} files`)
-           for (let i = 0; i < files.length; i++) {
-               let inscription = _getInscription({files: files[i], publicKey: publicKey, networkName: networkName, feerate: feerate, padding: padding, options: options})
+            let files = []
+            if(options && options.deligate){
+                fileCount = 1
+            }else{
+                if(!filePaths) return {status: false, message: "filePaths is required"}
+                fileCount = filePaths.length
+                files = await getFileData(filePaths)
+                if(fileCount > 1 && options.sat_details) return {status: false, message: `inscription on special sat can only be done on one file, you have ${fileCount} files`}
+            }
+            
+           for (let i = 0; i < fileCount; i++) {
+                let inscription
+                if(options && options.deligate){
+                    inscription = _getInscription({files: null, publicKey: publicKey, networkName: networkName, feerate: feerate, padding: padding, options: options})
+                }else{
+                    inscription = _getInscription({files: files[i], publicKey: publicKey, networkName: networkName, feerate: feerate, padding: padding, options: options})
+                }
                inscriptions.push(inscription)
                total_fees += inscription.fee
                outputCount += 1
            }
+           if(options && options.sat_details){
+                if(typeof options.sat_details.privateKey !== "string") return {status: false, message: "sat_details privateKey is required"}
+            }
        }
        
        if(options && options.service_fee){
-           if(!options.service_address) throw new Error ("service_address is required to add a service fee")
+           if(!options.service_address) return {status: false, message: "service_address is required to add a service fee"}
            const prefix = getTransactionSize({input:1, output:[{outputType: "P2TR", count: 1}], addressType: "taptoot"}).txVBytes * feerate;
            total_fees += options.service_fee + prefix
            outputCount += 1
        }
        if(options && options.collection_fee){
-           if(!options.collection_address) throw new Error ("collection_address is required to add a collection fee")
+           if(!options.collection_address) return {status: false, message: "collection_address is required to add a collection fee"}
            const prefix = getTransactionSize({input:1, output:[{outputType: "P2TR", count: 1}], addressType: "taptoot"}).txVBytes * feerate;
            total_fees += options.collection_fee + prefix
            outputCount += 1
        }
        
+       let extraSize = 80 * fileCount * feerate
        let outFeeData = [{outputType: "P2TR", count: outputCount}]
        let totalSize = getTransactionSize({input: inputs, output:outFeeData, addressType: "taptoot"}).txVBytes*feerate
-       total_fees += totalSize
+     
+       //add extra size to the total fees
+       total_fees += totalSize + extraSize
 
        if(options && options.show_insc === false){
            let n_insc = inscriptions.map(x => {
@@ -638,7 +811,7 @@ export const getInscriptions = async ({filePaths, publicKey, networkName, feerat
        }
    }catch(e){
        console.log(e)
-       throw new Error(e)
+       return {status: false, message: e.message}
    }
 }
 
@@ -791,27 +964,25 @@ const getFeeOut = async ({}) => {
    }
 }
 
-export const splitFunds = async ({filePaths, privateKey, networkName, feerate, padding, options}) => {
-   try{
+export const splitFunds = async ({filePaths, privateKey, networkName, feerate, padding, options, batch}) => {
+   try{ 
+       if(!privateKey) return {status: false, message: "privateKey is required"}
+       if(!networkName) return {status: false, message: "networkName is required"}
+       if(!feerate) return {status: false, message: "feerate is required"}
+       if(!padding) return {status: false, message: "padding is required"}
 
-       if(!filePaths && !options.batch){
-           throw new Error("filePaths or batch data is required")
-       }else if(options.batch){
-           if(!options.batch.data || options.batch.data.length === 0){
-               throw new Error("batch data is required")
-           }
-       }
-       if(!privateKey) throw new Error("privateKey is required")
-       if(!networkName) throw new Error("networkName is required")
-       if(!feerate) throw new Error("feerate is required")
-       if(!padding) throw new Error("padding is required")
+       if(batch){
+            if(!batch.data || batch.data.length === 0){
+                return {status: false, message: "batch data is required"}
+            }
+        }
 
-       if(options && options.sat_details && !options.batch){
-           if(filePaths && filePaths.length > 1)throw new Error("special sat can only be used on one file")
-           if(!options.sat_details.privateKey) throw new Error ("sat_privateKey is required")
-           if(!options.sat_details.satpoint) throw new Error ("satpoint is required")
-           if(typeof options.sat_details.privateKey !== "string") throw new Error ("sat_privateKey must be a string")
-           if(typeof options.sat_details.satpoint !== "string")throw new Error ("satpoin must be a string")     
+       if(options && options.sat_details && !batch){
+           if(filePaths && filePaths.length > 1) return {status: false, message: "special sat can only be used on one file"}
+           if(!options.sat_details.privateKey) return {status: false, message: "sat_privateKey is required"}
+           if(!options.sat_details.satpoint) return {status: false, message: "satpoint is required"}
+           if(typeof options.sat_details.privateKey !== "string") return {status: false, message: "sat_privateKey must be a string"}
+           if(typeof options.sat_details.satpoint !== "string") return {status: false, message: "satpoint must be a string"}  
        }
 
        let initData = getInitData2({privateKey: privateKey, networkName: networkName})
@@ -828,7 +999,8 @@ export const splitFunds = async ({filePaths, privateKey, networkName, feerate, p
            networkName: networkName, 
            feerate: feerate, 
            padding: padding, 
-           options: opt
+           options: opt,
+           batch: batch ? batch : null
        })
        const inscAddr = inscData.inscriptions.map(x => x.inscriptionAddress)
        
@@ -837,10 +1009,10 @@ export const splitFunds = async ({filePaths, privateKey, networkName, feerate, p
 
        let vin = []
        let input = []
-
+       
        const utxos = await getUtxo({address: fundingAddress, networkName: networkName})
        if(utxos.length === 0){
-           throw new Error("No funds available for inscription")
+           return {status: false, message: "No funds available for inscription"}
        }
        let spend_utxo = null
        utxos.forEach(x => {
@@ -849,7 +1021,7 @@ export const splitFunds = async ({filePaths, privateKey, networkName, feerate, p
            }
        })
        if(spend_utxo === null){
-        throw new Error("No funds available for inscription")
+            return {status: false, message: "No funds available for inscription"}
         }
        
        if(options && options.sat_details){
@@ -911,7 +1083,7 @@ export const splitFunds = async ({filePaths, privateKey, networkName, feerate, p
        return {txHex: rawtx, txid: txid, inscriptionAddress: inscAddr}
    }catch(e){
        console.log(e)
-       throw new Error(e.message)
+         return {status: false, message: e.message}
    }
 
 }
@@ -1048,12 +1220,12 @@ export const splitFunds = async ({filePaths, privateKey, networkName, feerate, p
 
 // }
 
-const createBatchInscribeTx = async ({inscription, receiveAddress, privateKey, networkName, options}) => {
+const createBatchInscribeTx = async ({inscription, receiveAddress, privateKey, networkName, batch}) => {
    try{
        const addressEncoding = getAddressEncoding({networkName: networkName})
        const utxos = await getUtxo({address: inscription.inscriptionAddress, networkName: networkName})
        if(utxos.length === 0){
-           throw new Error("No funds available for inscription")
+           return {status: false, message: "No funds available for inscription"}
        }
        let spend_utxo 
        utxos.forEach(x => {
@@ -1070,10 +1242,10 @@ const createBatchInscribeTx = async ({inscription, receiveAddress, privateKey, n
                scriptPubKey: [ 'OP_1', Address.p2tr.decode(inscription.inscriptionAddress, addressEncoding).hex ]
            },
        }]
-       const vout = options.batch.data.map(x => {
+       const vout = batch.data.map(x => {
            return {
                value: inscription.padding,
-               scriptPubKey: [ 'OP_1', Address.p2tr.decode(receiveAddress, addressEncoding).hex ]
+               scriptPubKey: [ 'OP_1', Address.p2tr.decode(x.receiveAddress, addressEncoding).hex ]
            }
        })
 
@@ -1089,14 +1261,14 @@ const createBatchInscribeTx = async ({inscription, receiveAddress, privateKey, n
        let rawtx = Tx.encode(redeemtx).hex;
        const txid = Tx.util.getTxid(Tx.encode(redeemtx))
        let ids = []
-       options.batch.data.forEach((x, i) => {
+       batch.data.forEach((x, i) => {
            ids.push(`${txid}i${i}`)
        })
        transactions.push({txid: txid, txHex: rawtx, id: ids})
        return transactions    
    }catch(e){
        console.log(e)
-       throw new Error(e.message)
+       return {status: false, message: e.message}
    }
 }
 
@@ -1111,13 +1283,16 @@ const createInscribeTx = async ({inscriptions, receiveAddress, privateKey, netwo
                throw new Error("No funds available for inscription")
            }
            
-           let spend_utxo 
+           let spend_utxo = null
            utxos.forEach(x => {
                if(x.value >= inscriptions[i].fee){
                    spend_utxo = x
                }
            })
 
+           if(spend_utxo === null){
+                throw new Error("No funds available for inscription")
+           }
            const redeemtx = Tx.create({
                vin  : [{
                    txid: spend_utxo.txid,
@@ -1145,21 +1320,19 @@ const createInscribeTx = async ({inscriptions, receiveAddress, privateKey, netwo
    }
 }
 
-export const createInscribeTransactions = async ({filePaths, privateKey, receiveAddress, networkName, feerate, padding, options}) => {
+export const createInscribeTransactions = async ({filePaths, privateKey, receiveAddress, networkName, feerate, padding, options, batch}) => {
    try{
 
-       if(!filePaths && !options.batch){
-           throw new Error("filePaths or batch data is required")
-       }else if(options.batch){
-           if(!options.batch.data || options.batch.data.length === 0){
-               throw new Error("batch data is required")
+       if(batch){
+           if(!batch.data || batch.data.length === 0){
+               return {status: false, message: "batch data is required"}
            }
        }
-       if(!privateKey) throw new Error("privateKey is required")
-       if(!receiveAddress) throw new Error("receiveAddress is required")
-       if(!networkName) throw new Error("networkName is required")
-       if(!feerate) throw new Error("feerate is required")
-       if(!padding) throw new Error("padding is required")
+       if(!privateKey) return {status: false, message: "privateKey is required"}
+       if(!receiveAddress) return {status: false, message: "receiveAddress is required"}
+       if(!networkName) return {status: false, message: "networkName is required"}
+       if(!feerate) return {status: false, message: "feerate is required"}
+       if(!padding) return {status: false, message: "padding is required"}
 
        const keyPair = getKeyPair({privateKey: privateKey})
        let inscription_data = await getInscriptions({
@@ -1168,14 +1341,15 @@ export const createInscribeTransactions = async ({filePaths, privateKey, receive
            networkName: networkName, 
            feerate: feerate, 
            padding: padding, 
-           options: options
+           options: options,
+            batch: batch ? batch : null
        })
 
        let inscriptions = inscription_data.inscriptions
        let transactions = []
-       if(options && options.batch){
+       if(batch){
            const inscription = inscriptions[0]
-           transactions = await createBatchInscribeTx({inscription: inscription, receiveAddress: receiveAddress, privateKey: privateKey, networkName: networkName, options:options})
+           transactions = await createBatchInscribeTx({inscription: inscription, receiveAddress: receiveAddress, privateKey: privateKey, networkName: networkName, batch: batch})
        }else{
            transactions = await createInscribeTx({inscriptions: inscriptions, receiveAddress: receiveAddress, privateKey: privateKey, networkName: networkName})
        }
@@ -1183,7 +1357,7 @@ export const createInscribeTransactions = async ({filePaths, privateKey, receive
        return transactions
    }catch(e){
        console.log(e)
-       throw new Error(e.message)
+       return {status: false, message: e.message}
    }
 }
 
@@ -1378,6 +1552,41 @@ function getMimeType(fileExtension) {
    return mimeType
 }
 
+function toLittleEndian(integer) {
+    const bytes = [];
+    for (let i = 0; i < 4; i++) {
+        bytes.push(integer & 0xFF); // Extract the least significant byte
+        integer >>= 8; // Shift right by 8 bits to get the next byte
+    }
+    return bytes;
+}
+
+function getDeligateData(id) {
+    const match = id.match(/i(\d+)$/);
+    const index = parseInt(match[1]);
+    const txId = id.substring(0, match.index); 
+    
+    //convert the txid to bytes(uint8Array) and reverse it
+    const serilizedBytes = hexToBytes(txId)
+    serilizedBytes.reverse()
+    
+    //convert the index to little endian
+    const littleEndianIndex = Uint8Array.from(toLittleEndian(index))
+    
+    // combine the serilizedBytes and littleEndianIndex into one Uint8Array
+    let result =  new Uint8Array(serilizedBytes.length + littleEndianIndex.length)
+    result.set(serilizedBytes, 0)
+    result.set(littleEndianIndex, serilizedBytes.length)
+    
+    // convert the result to hex
+    const serilizedHex = bytesToHex(result)
+    // remove trailing zeros from serilizedHex and assign to result
+    result = serilizedHex.replace(/00+$/, '')
+    // convert the result to bytes
+    result = hexToBytes(result)
+    return { txId, index , serilizedId: result};
+}
+
 function waitSomeSeconds(number) {
    let num = number.toString() + "000";
    num = Number(num);
@@ -1402,66 +1611,95 @@ function sleep(ms) {
 //in txt format create a documentation for all the exported functions in this file
 //create a test file for all the functions in this file
 
-// let sat_publicKey = "599c854e207dd1a9366f8f25e46e2c0532d42deed9c75fda3399039340978798"
-// let sat_privateKey = "e9adb088a32b7ac0af6b459e3339795a89a7f26046eb342d5ba0e06a54e49e99"
-// let satFundAddr = "tb1pq6mls2dazea494r2sz67qy9c608fmh5nzmf4zkz5efs6yt9k8sqsxywmce"
+let sat_publicKey = "d1144b067ef1682ee40ed67ed3821783b1edb59f5ae0e23573888dbbe6954618"
+let sat_privateKey = "870d748d23b9854a4c679df75db51124fbf9bcc46e5f51990716f29ce980f4ad"
+let satFundAddr = "tb1pg7e4pyyynqc2n9w8v7teccw24ty4vv3hgxadh42n3dpc96u867vsv3memx"
 
-// let sat_details = {
-//     privateKey: sat_privateKey, 
-//     satpoint: "7d2f34fec10956e3025a8a02707a7bff9d4eaa841b2baadfedd40e31ce8c1a17:0:994"
-// }
+let sat_details = {
+    privateKey: sat_privateKey, 
+    satpoint: "151b15c12ceea07c79e810d14d1c238f150f42c389a69dbc5c89bf3983c69a17:0:996"
+}
 
-// let batchData = {
-//     data: [
-//         {
-//             file: `${process.cwd()}/testImg/1.png`,
-//             receiveAddress: "tb1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0ysppm29h",
-//             metadata: {creator: "arch.xyz", collection: "test collection", platform: "inscribable.xyz", description: "batch inscription on a specific sat type"},
-//             size: 472    
-//         },
-//         {
-//             file: `${process.cwd()}/testImg/2.png`,
-//             receiveAddress: "tb1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0ysppm29h",
-//             metadata: {creator: "arch.xyz", collection: "test collection", platform: "inscribable.xyz", description: "batch inscription on a specific sat type"},
-//             size: 490    
-//         }
-//     ]
-// }
+let batchData = {
+    data: [
+        {   
+            deligate: {
+                id: "6299259000e0c44d4324b2522571fef6a1466cfeff4997c226b3b4ab3a3ae1dai0",
+                fileType: 'svg'
+            },
+            file: `${process.cwd()}/testImg/1.png`,
+            receiveAddress: "tb1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0ysppm29h",
+            metadata: {creator: "arch.xyz", collection: "test collection", platform: "inscribable.xyz", description: "batch inscription on a specific sat type"},
+            size: 472    
+        },
+        {   
+            deligate: {
+                id: "8be29549cca88b5ee60ca03ad1e3eba602348295b18a523421a1b08b5eacd858i0",
+                fileType: 'html'
+            },
+            file: `${process.cwd()}/testImg/2.png`,
+            receiveAddress: "tb1pk9gg9ywgd3zjpzexsuhzfh5jmfterg8nw8a7h6l4tweuure62hmsxfv8r5",
+            metadata: {creator: "arch.xyz", collection: "test collection", platform: "inscribable.xyz", description: "batch inscription on a specific sat type"},
+            size: 490    
+        }
+    ]
+}
 
-// const options = {   
-//     service_fee: 2000, 
-//     service_address: "tb1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0ysppm29h", 
-//     collection_fee: 1000, 
-//     collection_address: "tb1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0ysppm29h", 
-//     metadata: {creator: "arch.xyz", collection: "test collection", platform: "inscribable.xyz", description: "simulating special sat inscription"},
-//     //sat_details: sat_details,   
-//     //batch: batchData,
-// }
+const options = {   
+    deligate: {
+        id: "8be29549cca88b5ee60ca03ad1e3eba602348295b18a523421a1b08b5eacd858i0",
+        //fileType: 'html'
+    },
+    service_fee: 2000, 
+    service_address: "tb1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0ysppm29h", 
+    //collection_fee: 1000, 
+    //collection_address: "tb1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0ysppm29h", 
+    //metadata: {creator: "arch.xyz", collection: "test collection", platform: "inscribable.xyz", description: "simulating special sat inscription"},
+    sat_details: sat_details, 
+}
 
-// let filePaths = [`${process.cwd()}/testImg/1.png`]
-// let feeRate = 5
-// let padding = 550
-// let publicKey = "96df6f410ad143bdd7f62453dd864c3d702cf48f3af76950489fee11c1c4f450"
-// let privateKey = "21b88b3529ff8a78f17897f19413f5c0bdf8fc7b12ba2ffbc7c70ea9655dbf2b"
-// let insc_fundAddr = "tb1pcrqfa4hpm0vg9dz5nhrz0yalnw3a7ujuspnr3j5ppxfu5af5804sjh4wve"
+let filePaths = [`${process.cwd()}/testImg/1.png`]
+let feeRate = 20
+let padding = 550
+let publicKey = "a6d20289a0861be945bd0df88aa9500be81717af112c2c1ebfbfbe8012b60ba3"
+let privateKey = "84e5fb722756527c075ec5708d65d2b72fa412d4ed6104126a46e304915d2e9f"
+let insc_fundAddr = "tb1psjnu8he228hhddeauf5c7jcjhfut6l09kv6uw2cpklvxm4cj49vqvm4ct9"
 
 
 // getInscriptions({
-//     filePaths: filePaths, 
+//     //filePaths: filePaths, 
 //     publicKey: publicKey, 
 //     networkName: "testnet", 
 //     feerate: feeRate, 
 //     padding: padding, 
-//     options: options 
+//     options: options,
+//     //batch: batchData
 // }).then(res => {
 //     console.log(res)
 // }).catch()
 
-// splitFunds({filePaths: filePaths, privateKey: privateKey, networkName: "testnet", feerate: feeRate, padding: padding, options: options}).then(res => {
+// splitFunds({
+//     //filePaths: filePaths, 
+//     privateKey: privateKey, 
+//     networkName: "testnet", 
+//     feerate: feeRate, 
+//     padding: padding, 
+//     options: options, 
+//     //batch: batchData
+// }).then(res => {
 //     console.log(res)
 // }).catch()
 
-// createInscribeTransactions({filePaths: filePaths, privateKey:privateKey, receiveAddress:"tb1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0ysppm29h", networkName:"testnet", feerate:feeRate, padding:padding, options:options}).then(res => {
+// createInscribeTransactions({
+//     //filePaths: filePaths, 
+//     privateKey:privateKey, 
+//     receiveAddress:"tb1pk9gg9ywgd3zjpzexsuhzfh5jmfterg8nw8a7h6l4tweuure62hmsxfv8r5", 
+//     networkName:"testnet", 
+//     feerate:feeRate, 
+//     padding:padding, 
+//     options:options, 
+//     //batch: batchData
+// }).then(res => {
 //     console.log(res)
 // }).catch()
 
@@ -1469,11 +1707,14 @@ function sleep(ms) {
 
 //console.log(getKeyPair({networkName: "testnet"}))
 
-// console.log(getInscriptionCost({
-//     fileSizes: [472, 490], 
-//     feerate: 5 || feeRate, 
+// console.log("inscription cost 1", getInscriptionCost({
+//     //fileSizes: [472], 
+//     feerate: feeRate, 
 //     padding: 550, 
-//     options: options
+//     options: options,
+//     //batch: batchData
 // }))
 
 //console.log(getAllAddress({privateKey: "9c45ef6897c0588477ddf51325ea10203168e06a2ffbc2586c0878364f82012f", networkName: "testnet"}))
+
+//console.log(getDeligateData("7d2f34fec10956e3025a8a02707a7bff9d4eaa841b2baadfedd40e31ce8c1a17i256"))
