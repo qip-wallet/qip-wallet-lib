@@ -861,7 +861,7 @@ const addOutput = async ({output, addressType, index}) => {
 
 }
 
-const handleSatPoint = async ({satpoint, satUtxo, address, inscription, spend_utxo}) => {
+const handleSatPoint = async ({satpoint, satUtxo, address, inscription, spend_utxo, addToIns}) => {
    try{
        let n_satpoint = satpoint.split(":")
        if(n_satpoint.length !== 3)throw new Error ("satpoint must be in the format txid:vout:offset")   
@@ -885,9 +885,9 @@ const handleSatPoint = async ({satpoint, satUtxo, address, inscription, spend_ut
        let offset = parseInt(n_satpoint[2])
        if(offset > 330){
            outputs.push({value: offset, address: address});
-           outputs.push({ value: inscription.fee + (sat_utxo[0].value - offset), address: inscription.inscriptionAddress})
+           outputs.push({ value: addToIns + inscription.fee + (sat_utxo[0].value - offset), address: inscription.inscriptionAddress})
        }else{
-           outputs.push({ value: inscription.fee + (sat_utxo[0].value - offset), address: inscription.inscriptionAddress})
+           outputs.push({ value: addToIns + inscription.fee + (sat_utxo[0].value - offset), address: inscription.inscriptionAddress})
        }
        return {vin: vin, outputs: outputs}
    }catch(e){
@@ -896,7 +896,7 @@ const handleSatPoint = async ({satpoint, satUtxo, address, inscription, spend_ut
    }
 }
 
-const handleSatTx2 = async ({ networkName, sat_privateKey, inscriptions, satpoint, spend_utxo}) => {
+const handleSatTx2 = async ({ networkName, sat_privateKey, inscriptions, satpoint, spend_utxo, addToIns}) => {
    try{
        if(typeof satpoint !== "string")throw new Error ("satpoint must be a string")
        let vin = []
@@ -918,7 +918,7 @@ const handleSatTx2 = async ({ networkName, sat_privateKey, inscriptions, satpoin
        }
 
        if(satpoint){
-           let satData = await handleSatPoint({satpoint: satpoint, satUtxo: sat_utxo, address: address, inscription: inscriptions[0], spend_utxo: spend_utxo})
+           let satData = await handleSatPoint({satpoint: satpoint, satUtxo: sat_utxo, address: address, inscription: inscriptions[0], spend_utxo: spend_utxo, addToIns: addToIns})
            vin = satData.vin
            outputs = satData.outputs
        }else{
@@ -933,7 +933,7 @@ const handleSatTx2 = async ({ networkName, sat_privateKey, inscriptions, satpoin
                value: spend_utxo.value,
            })
            outputs.push({value: sat_utxo[i].value - 1, address: address});
-           outputs.push({ value: inscriptions[i].fee + 1, address: inscriptions[0].inscriptionAddress})
+           outputs.push({ value: addToIns + inscriptions[i].fee + 1, address: inscriptions[0].inscriptionAddress})
        }
        
        return {vin: vin, outputs: outputs, tap_publicKey: initData.tap_publicKey}
@@ -1024,8 +1024,26 @@ export const splitFunds = async ({filePaths, privateKey, networkName, feerate, p
             return {status: false, message: "No funds available for inscription"}
         }
        
-       if(options && options.sat_details){
-           let satTxData = await handleSatTx2({networkName: networkName, sat_privateKey: options.sat_details.privateKey, inscriptions: inscriptions, satpoint: options.sat_details.satpoint, spend_utxo: spend_utxo})
+       //get transaction cost
+       let out_count = 1
+       let ins_count = 1
+       if(options && options.service_fee) out_count += 1
+       if(options && options.collection_fee) out_count += 1
+       if(options && options.sat_details) {
+            out_count += 1
+            ins_count += 1
+        }
+
+       const _txSize = getTransactionSize({input: ins_count, output: [{outputType: "P2TR", count: out_count}], addressType: "taproot"}).txVBytes
+       const splitTxFee = _txSize * feerate
+       
+       const pad = inscriptions.reduce((acc, x) => acc + x.fee, 0)
+       const serviceAmount = options && options.service_fee ? options.service_fee : 0
+       const collectionAmount = options && options.collection_fee ? options.collection_fee : 0
+       const addToInscription = (spend_utxo.value - splitTxFee - pad - serviceAmount - collectionAmount) / inscriptions.length
+       
+        if(options && options.sat_details){
+           let satTxData = await handleSatTx2({networkName: networkName, sat_privateKey: options.sat_details.privateKey, inscriptions: inscriptions, satpoint: options.sat_details.satpoint, spend_utxo: spend_utxo, addToIns: addToInscription})
            vin = satTxData.vin
            let n_input = await getInputData("taproot", vin, networkName, Buffer.from(satTxData.tap_publicKey, 'hex'))
            n_input.map(x => {
@@ -1042,15 +1060,14 @@ export const splitFunds = async ({filePaths, privateKey, networkName, feerate, p
            n_input.map(x => {
                input.push(x)
            })
-
            for (let i = 0; i < inscriptions.length; i++) {
-               outputs.push(
-                   {
-                       value: inscriptions[i].fee,
-                       address: inscriptions[i].inscriptionAddress
-                   }
-               );
-           }
+                outputs.push(
+                    {
+                        value: inscriptions[i].fee + addToInscription,
+                        address: inscriptions[i].inscriptionAddress
+                    }
+                );
+            }
        }
 
        if(options && options.service_fee){
@@ -1064,8 +1081,8 @@ export const splitFunds = async ({filePaths, privateKey, networkName, feerate, p
                value: options.collection_fee,
                address: options.collection_address
            });
-       }
-       
+       }      
+
        const psbtData = getPsbtDetails({networkName:networkName, input:input, output:outputs})
        let finalized
        if(options && options.sat_details){
@@ -1617,7 +1634,7 @@ let satFundAddr = "tb1pg7e4pyyynqc2n9w8v7teccw24ty4vv3hgxadh42n3dpc96u867vsv3mem
 
 let sat_details = {
     privateKey: sat_privateKey, 
-    satpoint: "151b15c12ceea07c79e810d14d1c238f150f42c389a69dbc5c89bf3983c69a17:0:996"
+    satpoint: "6d14b28c143b020d9680f76666c357ec86ac9a9d119d07a15690bd813fb69976:0:994"
 }
 
 let batchData = {
@@ -1650,16 +1667,16 @@ const options = {
         id: "8be29549cca88b5ee60ca03ad1e3eba602348295b18a523421a1b08b5eacd858i0",
         //fileType: 'html'
     },
-    service_fee: 2000, 
+    service_fee: 1000, 
     service_address: "tb1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0ysppm29h", 
-    //collection_fee: 1000, 
-    //collection_address: "tb1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0ysppm29h", 
+    collection_fee: 1000, 
+    collection_address: "tb1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0ysppm29h", 
     //metadata: {creator: "arch.xyz", collection: "test collection", platform: "inscribable.xyz", description: "simulating special sat inscription"},
     sat_details: sat_details, 
 }
 
 let filePaths = [`${process.cwd()}/testImg/1.png`]
-let feeRate = 20
+let feeRate = 5
 let padding = 550
 let publicKey = "a6d20289a0861be945bd0df88aa9500be81717af112c2c1ebfbfbe8012b60ba3"
 let privateKey = "84e5fb722756527c075ec5708d65d2b72fa412d4ed6104126a46e304915d2e9f"
