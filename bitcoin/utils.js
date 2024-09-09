@@ -111,6 +111,7 @@ export function accountKeys({networkName, passPhrase, path}) {
           address: addressDetails.address,
           addressType: x,
           scriptType: getAddressType({address:addressDetails.address, networkName:networkName}),
+          script: addressDetails.script,
           publicKey: addressDetails.publicKey.toString("hex")
         }
       })
@@ -123,6 +124,24 @@ export function accountKeys({networkName, passPhrase, path}) {
 
 
   export async function init (network) {
+    if(network === "fractal_testnet"){
+      const {
+        bitcoin: { addresses, fees, transactions },
+      } = mempoolJS({
+        hostname: "mempool-testnet.fractalbitcoin.io",
+      });
+      return { addresses, fees, transactions };
+    }
+
+    if(network === "fractal_mainnet"){
+      const {
+        bitcoin: { addresses, fees, transactions },
+      } = mempoolJS({
+        hostname: "mempool.fractalbitcoin.io",
+      });
+      return { addresses, fees, transactions };
+    }
+
     const {
       bitcoin: { addresses, fees, transactions },
     } = mempoolJS({
@@ -140,6 +159,12 @@ export function accountKeys({networkName, passPhrase, path}) {
         case "mainnet":
           addressType = mainnetAddressType(address, networkName)
           break
+        case "fractal_mainnet":
+          addressType = mainnetAddressType(address, "mainnet")
+          break
+        case "fractal_testnet":
+          addressType = mainnetAddressType(address, "mainnet")
+          break
         case "testnet":
           addressType = testnetAddressType(address)
           break
@@ -153,7 +178,35 @@ export function accountKeys({networkName, passPhrase, path}) {
   }
 
   //Transaction Methods
-  export async function getUtxo ({networkName, address}){
+
+  export async function getUtxo({address ,networkName})  {
+    try{
+      if(!address) return {status: false, data: null, message: "address is required"}
+      if(networkName === 'fractal_mainnet' || networkName === 'fractal_testnet'){
+        const {addresses} = await init(networkName)
+        const utxos = await addresses.getAddressTxsUtxo({address: address})
+        if(utxos.length === 0) return []
+        return utxos
+      }
+      
+      const url = networkName === "mainnet" ? `https://blockstream.info/api/address/${address}/utxo` : networkName === "testnet" ? `https://blockstream.info/testnet/api/address/${address}/utxo` : null
+      if(url === null) return {status: false, data: null, message: "invalid network"}
+      const response = await axios.get(url)
+      //const response = {status: 400, data: {}}
+      if(response.status !== 200) {
+        const {addresses} = await init(networkName)
+        const utxos = await addresses.getAddressTxsUtxo({address: address})
+        if(utxos.length === 0) return []
+        return utxos 
+      }
+      return response.data
+    }catch(e){
+      console.log(e)
+      throw new Error(e.message)
+    }
+  }
+
+  export async function n_getUtxo ({networkName, address}){
     try{
       if(address === undefined) throw new Error("address is required")
       if(networkName === undefined) throw new Error("network name is required")
@@ -228,11 +281,16 @@ export function accountKeys({networkName, passPhrase, path}) {
       let outPutFeeDetails = new Map();
       let outFeeData = [];
 
-      let publicKey;
+      let _publicKey;
+      let _script
       if(privateKey){
-        publicKey = createAddress({privateKey: privateKey, networkName: networkName, addressType: addressType}).publicKey
+        let {publicKey, script} = createAddress({privateKey: privateKey, networkName: networkName, addressType: addressType})
+        _publicKey = publicKey;
+        _script = script
       }else if(wif){
-        publicKey = createAddress({wif: wif, networkName: networkName, addressType: addressType}).publicKey
+        let {publicKey, script} = createAddress({wif: wif, networkName: networkName, addressType: addressType})
+        _publicKey = publicKey;
+        _script = script
       }
 
       if(changeAddress || changeAddress !== undefined){
@@ -275,7 +333,7 @@ export function accountKeys({networkName, passPhrase, path}) {
       if(changeAddress && changeAmount > 1000){
         outputData.push({address:changeAddress, value: totalAvailable - toSpend - txFee})
       }
-      const inputData = await getInputData(addressType, input, networkName, publicKey)
+      const inputData = await getInputData(addressType, input, networkName, _publicKey, _script)
       const signedTx = signTransaction({networkName:networkName, privateKey:privateKey, wif:wif, addressType:addressType, input:inputData, output:outputData})
       return {
         txHex: signedTx.txHex,
@@ -331,7 +389,7 @@ export function accountKeys({networkName, passPhrase, path}) {
     }
   }
 
-  export async function createTransaction2 ({input, output, addressType, networkName, feeRate, changeAddress, publicKey}) {
+  export async function createTransaction2 ({input, output, addressType, networkName, feeRate, changeAddress, publicKey, script}) {
     try{ 
       let outputData = output
       let totalAvailable = 0;
@@ -380,7 +438,7 @@ export function accountKeys({networkName, passPhrase, path}) {
       if(changeAddress && changeAmount > 1000){
         outputData.push({address:changeAddress, value: totalAvailable - toSpend - txFee})
       }
-      const inputData = await getInputData(addressType, input, networkName, pubKey)
+      const inputData = await getInputData(addressType, input, networkName, pubKey, script)
       let psbtData = getPsbtDetails({networkName:networkName, input:inputData, output:outputData})
       return {
         psbt: {
@@ -398,19 +456,19 @@ export function accountKeys({networkName, passPhrase, path}) {
     }
   }
 
-  export async function addInputToPsbt ({psbt, networkName, addressType, input, publicKey}) {
+  export async function addInputToPsbt ({psbt, networkName, addressType, input, publicKey, script}) {
     try{
       const network = getNetwork(networkName)
       let pubKey = hexToBuffer(publicKey);
       if(psbt.psbtHex){
         let psbtData = Psbt.fromHex(psbt.psbtHex, {network})
-        let inputData = await getInputData(addressType, input, networkName, pubKey)
+        let inputData = await getInputData(addressType, input, networkName, pubKey, script)
         psbtData.addInputs(inputData)
         return {psbtHex: psbtData.toHex(), psbtBase64: psbtData.toBase64()}
       }
       if(psbt.psbtBase64){
         let psbtData = Psbt.fromBase64(psbt.psbtBase64, {network})
-        let inputData = await getInputData(addressType, input, networkName, pubKey)
+        let inputData = await getInputData(addressType, input, networkName, pubKey, script)
         psbtData.addInputs(inputData)
         return {psbtHex: psbtData.toHex(), psbtBase64: psbtData.toBase64()}
       }
@@ -454,23 +512,23 @@ export function accountKeys({networkName, passPhrase, path}) {
   }
   
    //input = [{txid: "", vout: 2, value: 20000}, {txid: "", vout: 0, value: 20000}]
- export async function getInputData(addressType, input, networkName, publicKey){
+ export async function getInputData(addressType, input, networkName, publicKey, script){
   try{
     let{transactions} = await init(networkName)
     let inData;
     let url
-    if(networkName === "mainnet"){
-      url = "https://blockstream.info/api/tx/"
-    }
-    if(networkName === "testnet"){
-      url = "https://blockstream.info/testnet/api/tx/"
-    }
+    // if(networkName === "mainnet"){
+    //   url = "https://blockstream.info/api/tx/"
+    // }
+    // if(networkName === "testnet"){
+    //   url = "https://blockstream.info/testnet/api/tx/"
+    // }
 
-    let _inputTx = await Promise.all(input.map(async(item, index)=>{
-      let tx = await axios.get(`${url}/${item.txid}`)
-      tx = tx.data
-      return {tx: tx, vout: item.vout}
-    }))
+    // let _inputTx = await Promise.all(input.map(async(item, index)=>{
+    //   let tx = await axios.get(`${url}/${item.txid}`)
+    //   tx = tx.data
+    //   return {tx: tx, vout: item.vout}
+    // }))
     
     switch (addressType){
       case "legacy":
@@ -486,20 +544,20 @@ export function accountKeys({networkName, passPhrase, path}) {
         })
         break
       case "segwit":   
-        inData = _inputTx.map((x) =>{
+        inData = input.map((x) =>{
           return {
-            hash:x.tx.txid,
+            hash:x.txid,
             index:x.vout,
-            witnessUtxo: {value: x.tx.vout[x.vout].value, script: Buffer.from(x.tx.vout[x.vout].scriptpubkey, "hex")},
+            witnessUtxo: {value: x.value, script: script},
           }
         })
         break
       case "taproot":
-        inData = _inputTx.map((x) =>{
+        inData = input.map((x) =>{
           return {
-            hash:x.tx.txid,
+            hash:x.txid,
             index:x.vout,
-            witnessUtxo: {value: x.tx.vout[x.vout].value, script: Buffer.from(x.tx.vout[x.vout].scriptpubkey, "hex")},
+            witnessUtxo: {value: x.value, script: script},
             tapInternalKey: publicKey
           }
         })
@@ -581,7 +639,7 @@ export function accountKeys({networkName, passPhrase, path}) {
 }
 
   function getNetwork (networkName) {
-    if (networkName === "mainnet") {
+    if (networkName === "mainnet" || networkName === "fractal_mainnet" || networkName === "fractal_testnet"  ) {
       return networks.bitcoin;
     } else if (networkName === "testnet") {
       return networks.testnet;
@@ -887,13 +945,13 @@ export function accountKeys({networkName, passPhrase, path}) {
     if(inscriptionUtxo.txid + txFee > availableInput) {
       throw new Error("not enough utxo balance for transactions")
     }else if(changeAmount < 550 && changeAmount > 0){
-      inputData = await getInputData(addressType, input, networkName, privateKey, wif)
+      inputData = await getInputData(addressType, input, networkName, privateKey, wif, account.script)
     }else{
       output.push({
         address: account.address,
         value: changeAmount
       })
-      inputData = await getInputData(addressType, input, networkName, privateKey, wif)
+      inputData = await getInputData(addressType, input, networkName, privateKey, wif, account.script)
     }
 
     let signedTx = signTransaction({networkName:networkName, privateKey:privateKey, wif:wif, addressType:addressType, input:inputData, output:output})
@@ -905,3 +963,6 @@ export function accountKeys({networkName, passPhrase, path}) {
       txSize: txSize
     }
   }
+
+
+  //getUtxo({address: "bc1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0yskfd9lc", networkName: "fractal_testnet"}).then(res => console.log(res)).catch()

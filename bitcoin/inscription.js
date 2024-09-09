@@ -25,7 +25,7 @@ import {
 
 const getFileData = async (file) => {
    try{    
-       let files = [];
+    let files = []
        for (let i = 0; i < file.length; i++) {
            let filename = file[i].split("/")[file[i].split("/").length -1]
            let filePath = file[i]
@@ -33,16 +33,15 @@ const getFileData = async (file) => {
            let mimetype = getMimeType(path.extname(file[i]));
            if(!mimetype) throw new Error ("file type not supported: ", path.extname(file[i]))
 
-           let _file = {name: filename, path: filePath, size:fileSize, type:mimetype }
-
-           if (file[i].size >= 350000) {
-               throw new Error ("file size exceeds limit: ", file[i])
+           if (fileSize >= 350000) {
+               throw new Error (`file size exceeds limit: ${file[i]}`)
            } 
 
-           let b64;
+           //let b64;
 
            if (mimetype === "text/plain" || mimetype === "text/html" || mimetype === "text/javascript" || mimeTypes === "text/markdown"){
                mimetype += ";charset=utf-8";
+               let _file = {name: filename, path: filePath, size:fileSize, type:mimetype }
                const text =  fs.readFileSync(filePath).toString()
                files.push({
                    name: _file.name,
@@ -51,7 +50,8 @@ const getFileData = async (file) => {
                    sha256: ""
                });
            }else{
-               b64 = await encodeBase64(_file);
+                let _file = {name: filename, path: filePath, size:fileSize, type:mimetype }
+               const b64 = await encodeBase64(_file);
                let base64 = b64.substring(b64.indexOf("base64,") + 7);
                let hex = base64ToHex(base64);
                let sha256 = await fileToSha256Hex({name: _file.name, path:_file.path});
@@ -64,7 +64,7 @@ const getFileData = async (file) => {
            }
        
        }
-       return files
+    return files
    }catch(e){
        console.log(e)
        throw new Error(e.message)
@@ -77,7 +77,7 @@ export const covertJsonToCbor = (obj) => {
 }
 
 export const getAddressEncoding = ({networkName}) => {
-   if(networkName === "mainnet"){
+   if(networkName === "mainnet" || networkName === "fractal_mainnet" || networkName === "fractal_testnet"){
        return "main"
    }else if(networkName === "testnet"){
        return "testnet"
@@ -259,7 +259,38 @@ const createInscriptionScript = ({pubkey, mimetype, data, metadata, deligate}) =
    }
 }
 
-const createBatchInscriptionScript = ({pubkey, inscriptionData}) => {
+function numberToLittleEndian(num) {
+    // Determine the smallest byte size needed for the number
+    let byteSize = 1;
+    if (num > 0xFF) {
+        byteSize = 2; // 16-bit
+    }
+    if (num > 0xFFFF) {
+        byteSize = 4; // 32-bit
+    }
+    if (num > 0xFFFFFFFF) {
+        byteSize = 8; // 64-bit
+    }
+
+    const buffer = new ArrayBuffer(byteSize);
+    const dataView = new DataView(buffer);
+
+    // Store the number in the buffer in little-endian format
+    if (byteSize === 1) {
+        dataView.setUint8(0, num);
+    } else if (byteSize === 2) {
+        dataView.setUint16(0, num, true); // true means little-endian
+    } else if (byteSize === 4) {
+        dataView.setUint32(0, num, true);
+    } else if (byteSize === 8) {
+        dataView.setBigUint64(0, BigInt(num), true);
+    }
+
+    // Return the buffer as a Uint8Array
+    return new Uint8Array(buffer);
+}
+
+const createBatchInscriptionScript = ({pubkey, inscriptionData, pad}) => {
    try{
        const ec = new TextEncoder();
        if(!pubkey || !inscriptionData){
@@ -271,13 +302,12 @@ const createBatchInscriptionScript = ({pubkey, inscriptionData}) => {
        
        let spriptHeader = [pubkey, 'OP_CHECKSIG']
        let scriptBackupHeader = ['0x' + buf2hex(pubkey.buffer), 'OP_CHECKSIG']
-       
+   
        inscriptionData.map((x, index) => {
             let _script = ['OP_0', 'OP_IF', ec.encode('ord')]
            //the pointer should be in little endian with trailing zeros ignored
-           const little_endian = toLittleEndian(index)
-           let pointer =  Uint8Array.from(bytesToHex(little_endian).replace(/00/g, ''))
-
+           const _index = 550 * index
+           let pointer = numberToLittleEndian(_index)
            let pointerScript = []
            
             pointerScript = ['02', pointer]
@@ -314,6 +344,7 @@ const createBatchInscriptionScript = ({pubkey, inscriptionData}) => {
                     _script = _script.concat(dataScript)
                 }
             }
+            _script.push('OP_0')
             _script.push('OP_ENDIF')
             script = script.concat(_script)
        })
@@ -332,7 +363,7 @@ const createBatchInscriptionScript = ({pubkey, inscriptionData}) => {
 const getInitData = ({privateKey, networkName}) => {
   try {
        if(!networkName){
-           throw new Error (`networkName can only be mainnet, or testnet, received: ${networkName}`)
+           throw new Error (`networkName can only be mainnet, fractal_mainnet, testnet or fractal_testnet, received: ${networkName}`)
        }
 
        let addressEncoding = getAddressEncoding({networkName: networkName})
@@ -412,7 +443,7 @@ const getInitData = ({privateKey, networkName}) => {
 export const getInitData2 = ({privateKey, networkName}) => {
    try {
         if(!networkName){
-            throw new Error (`networkName can only be mainnet, or testnet, received: ${networkName}`)
+            throw new Error (`networkName can only be mainnet, testnet , fractal_mainnet, fractal_testnet, received: ${networkName}`)
         }
 
         let privkey;
@@ -430,6 +461,7 @@ export const getInitData2 = ({privateKey, networkName}) => {
             tap_publicKey: data[0].addressType === "taproot" ? data[0].publicKey : null,
             validSigner: true,
             fundingAddress: data[0].addressType === "taproot" ? data[0].address : null,
+            script: data[0].script,
             version: "v2"
         }
     }catch(e){
@@ -546,21 +578,21 @@ const getBatchInscription = async ({publicKey, networkName, feerate, padding, ba
         let totalSize = 0
         let _padding = 0
         let files = []
-        let data = {}
         let incs_file_data = []
-        batch.data.map(x => {
-            let _data = {}
+        batch.data.forEach(x => {
             if(x.deligate){
                 if(!x.deligate.id) return {status: false, message: "deligate id is required"}
-                _data.deligate = x.deligate
-                _data.size = 0
-                totalSize += _data.size
+                const data = {
+                    deligate: x.deligate,
+                    size: 0
+                }
+                totalSize += data.size
                 _padding += pad
                 if(x.metadata){
                     extra_bytes += 80
-                    _data.metadata = x.metadata;
-                }   
-                incs_file_data.push(_data)
+                    data.metadata = x.metadata;
+                }  
+                incs_file_data.push(data)
             }else{
                 files = batch.data.map(x => x.file)
             }
@@ -568,19 +600,20 @@ const getBatchInscription = async ({publicKey, networkName, feerate, padding, ba
         
         //This handles batch without deligate
         let _file = await getFileData(files)
-        _file.map((x, i) => {
-            data.fileData = x;
-            data.size = hexToBytes(x.hex).length;
+        _file.forEach((x, index) => {
+            const data = {
+                fileData: x ,
+                size: hexToBytes(x.hex).length,
+            }
             totalSize += data.size
             _padding += pad
-            if(batch.data[i].metadata){
+            if(batch.data[index].metadata){
                 extra_bytes += 80
                 data.metadata = x.metadata
             } 
             incs_file_data.push(data)
         })
-       
-       const {script, script_backup} = createBatchInscriptionScript({pubkey: pubkey, inscriptionData: incs_file_data})
+       const {script, script_backup} = createBatchInscriptionScript({pubkey: pubkey, inscriptionData: incs_file_data, pad: pad})
        const leaf = Tap.encodeScript(script);
        const [tapkey, cblock] = Tap.getPubKey(pubkey, { target: leaf });
        const inscriptionAddress = Address.p2tr.encode(tapkey, addressEncoding);
@@ -936,7 +969,7 @@ const handleSatTx2 = async ({ networkName, sat_privateKey, inscriptions, satpoin
            outputs.push({ value: addToIns + inscriptions[i].fee + 1, address: inscriptions[0].inscriptionAddress})
        }
        
-       return {vin: vin, outputs: outputs, tap_publicKey: initData.tap_publicKey}
+       return {vin: vin, outputs: outputs, tap_publicKey: initData.tap_publicKey, script: initData.script}
    }catch(e){
        console.log(e)
        throw new Error(e.message)
@@ -987,6 +1020,7 @@ export const splitFunds = async ({filePaths, privateKey, networkName, feerate, p
 
        let initData = getInitData2({privateKey: privateKey, networkName: networkName})
        let fundingAddress = initData.fundingAddress;
+       let fundScript = initData.script;
        let outputs = [];
        
        let opt = options
@@ -1045,7 +1079,7 @@ export const splitFunds = async ({filePaths, privateKey, networkName, feerate, p
         if(options && options.sat_details){
            let satTxData = await handleSatTx2({networkName: networkName, sat_privateKey: options.sat_details.privateKey, inscriptions: inscriptions, satpoint: options.sat_details.satpoint, spend_utxo: spend_utxo, addToIns: addToInscription})
            vin = satTxData.vin
-           let n_input = await getInputData("taproot", vin, networkName, Buffer.from(satTxData.tap_publicKey, 'hex'))
+           let n_input = await getInputData("taproot", vin, networkName, Buffer.from(satTxData.tap_publicKey, 'hex'), satTxData.script)
            n_input.map(x => {
                input.push(x)
            })
@@ -1056,7 +1090,7 @@ export const splitFunds = async ({filePaths, privateKey, networkName, feerate, p
                vout: spend_utxo.vout,
                value: spend_utxo.value,
            })
-           let n_input = await getInputData("taproot", [{txid: spend_utxo.txid, vout:spend_utxo.vout, value: spend_utxo.value,}], networkName, Buffer.from(initData.tap_publicKey, 'hex'))
+           let n_input = await getInputData("taproot", [{txid: spend_utxo.txid, vout:spend_utxo.vout, value: spend_utxo.value,}], networkName, Buffer.from(initData.tap_publicKey, 'hex'), fundScript)
            n_input.map(x => {
                input.push(x)
            })
@@ -1293,6 +1327,8 @@ const createInscribeTx = async ({inscriptions, receiveAddress, privateKey, netwo
    try{
        let transactions = []
        for (let i = 0; i < inscriptions.length; i++) {
+
+            //get receive address type and account for only taproot and segwit
            let inscription = inscriptions[i]
            let addressEncoding = getAddressEncoding({networkName: networkName})
            let utxos = await getUtxo({address: inscription.inscriptionAddress, networkName: networkName})
@@ -1628,69 +1664,69 @@ function sleep(ms) {
 //in txt format create a documentation for all the exported functions in this file
 //create a test file for all the functions in this file
 
-let sat_publicKey = "d1144b067ef1682ee40ed67ed3821783b1edb59f5ae0e23573888dbbe6954618"
-let sat_privateKey = "870d748d23b9854a4c679df75db51124fbf9bcc46e5f51990716f29ce980f4ad"
-let satFundAddr = "tb1pg7e4pyyynqc2n9w8v7teccw24ty4vv3hgxadh42n3dpc96u867vsv3memx"
+// let sat_publicKey = "d1144b067ef1682ee40ed67ed3821783b1edb59f5ae0e23573888dbbe6954618"
+// let sat_privateKey = "870d748d23b9854a4c679df75db51124fbf9bcc46e5f51990716f29ce980f4ad"
+// let satFundAddr = "tb1pg7e4pyyynqc2n9w8v7teccw24ty4vv3hgxadh42n3dpc96u867vsv3memx"
 
-let sat_details = {
-    privateKey: sat_privateKey, 
-    satpoint: "6d14b28c143b020d9680f76666c357ec86ac9a9d119d07a15690bd813fb69976:0:994"
-}
+// let sat_details = {
+//     privateKey: sat_privateKey, 
+//     satpoint: "6d14b28c143b020d9680f76666c357ec86ac9a9d119d07a15690bd813fb69976:0:994"
+// }
 
-let batchData = {
-    data: [
-        {   
-            deligate: {
-                id: "6299259000e0c44d4324b2522571fef6a1466cfeff4997c226b3b4ab3a3ae1dai0",
-                fileType: 'svg'
-            },
-            file: `${process.cwd()}/testImg/1.png`,
-            receiveAddress: "tb1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0ysppm29h",
-            metadata: {creator: "arch.xyz", collection: "test collection", platform: "inscribable.xyz", description: "batch inscription on a specific sat type"},
-            size: 472    
-        },
-        {   
-            deligate: {
-                id: "8be29549cca88b5ee60ca03ad1e3eba602348295b18a523421a1b08b5eacd858i0",
-                fileType: 'html'
-            },
-            file: `${process.cwd()}/testImg/2.png`,
-            receiveAddress: "tb1pk9gg9ywgd3zjpzexsuhzfh5jmfterg8nw8a7h6l4tweuure62hmsxfv8r5",
-            metadata: {creator: "arch.xyz", collection: "test collection", platform: "inscribable.xyz", description: "batch inscription on a specific sat type"},
-            size: 490    
-        }
-    ]
-}
+// let batchData = {
+//     data: [
+//         {   
+//             deligate: {
+//                 id: "6299259000e0c44d4324b2522571fef6a1466cfeff4997c226b3b4ab3a3ae1dai0",
+//                 fileType: 'svg'
+//             },
+//             file: `${process.cwd()}/testImg/1.png`,
+//             receiveAddress: "bc1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0yskfd9lc",
+//             metadata: {creator: "arch.xyz", collection: "test collection", platform: "inscribable.xyz", description: "batch inscription on a specific sat type"},
+//             size: 472    
+//         },
+//         {   
+//             deligate: {
+//                 id: "8be29549cca88b5ee60ca03ad1e3eba602348295b18a523421a1b08b5eacd858i0",
+//                 fileType: 'html'
+//             },
+//             file: `${process.cwd()}/testImg/2.png`,
+//             receiveAddress: "bc1pztwp7ex4hen6a8kzh42pd8qt36n37her6ramenx593g6scly0wqs0558gc",
+//             metadata: {creator: "arch.xyz", collection: "test collection", platform: "inscribable.xyz", description: "batch inscription on a specific sat type"},
+//             size: 490    
+//         }
+//     ]
+// }
 
-const options = {   
-    deligate: {
-        id: "8be29549cca88b5ee60ca03ad1e3eba602348295b18a523421a1b08b5eacd858i0",
-        //fileType: 'html'
-    },
-    service_fee: 1000, 
-    service_address: "tb1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0ysppm29h", 
-    collection_fee: 1000, 
-    collection_address: "tb1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0ysppm29h", 
-    //metadata: {creator: "arch.xyz", collection: "test collection", platform: "inscribable.xyz", description: "simulating special sat inscription"},
-    sat_details: sat_details, 
-}
+// const options = {   
+//     // deligate: {
+//     //     id: "8be29549cca88b5ee60ca03ad1e3eba602348295b18a523421a1b08b5eacd858i0",
+//     //     //fileType: 'html'
+//     // },
+//     service_fee: 1000, 
+//     service_address: "bc1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0yskfd9lc", 
+//     collection_fee: 1000, 
+//     collection_address: "bc1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0yskfd9lc", 
+//     //metadata: {creator: "arch.xyz", collection: "test collection", platform: "inscribable.xyz", description: "simulating special sat inscription"},
+//     //sat_details: sat_details, 
+// }
 
-let filePaths = [`${process.cwd()}/testImg/1.png`]
-let feeRate = 5
-let padding = 550
-let publicKey = "a6d20289a0861be945bd0df88aa9500be81717af112c2c1ebfbfbe8012b60ba3"
-let privateKey = "84e5fb722756527c075ec5708d65d2b72fa412d4ed6104126a46e304915d2e9f"
-let insc_fundAddr = "tb1psjnu8he228hhddeauf5c7jcjhfut6l09kv6uw2cpklvxm4cj49vqvm4ct9"
+// let filePaths = [`${process.cwd()}/testImg/1.png`]
+// let feeRate = 5
+// let padding = 550
+// let publicKey = "676a000035cbae2731e82d8825da6b00439b74d62ddb75795f896a083ad3766c"
+// let privateKey = "cff4e99e73d566dfa287d58bfdd11d45c1791cc053c2781410c103ebce2d6a73"
+// let insc_fundAddr = "bc1p4zhzchmam94jd9fh58e5frqeme9fefs698v8shffasn3ns60kt7szkldds"
 
 
 // getInscriptions({
 //     //filePaths: filePaths, 
 //     publicKey: publicKey, 
-//     networkName: "testnet", 
+//     networkName: "fractal_testnet", 
 //     feerate: feeRate, 
 //     padding: padding, 
 //     options: options,
-//     //batch: batchData
+//     batch: batchData
 // }).then(res => {
 //     console.log(res)
 // }).catch()
@@ -1698,11 +1734,11 @@ let insc_fundAddr = "tb1psjnu8he228hhddeauf5c7jcjhfut6l09kv6uw2cpklvxm4cj49vqvm4
 // splitFunds({
 //     //filePaths: filePaths, 
 //     privateKey: privateKey, 
-//     networkName: "testnet", 
+//     networkName: "fractal_testnet", 
 //     feerate: feeRate, 
 //     padding: padding, 
 //     options: options, 
-//     //batch: batchData
+//     batch: batchData
 // }).then(res => {
 //     console.log(res)
 // }).catch()
@@ -1710,28 +1746,30 @@ let insc_fundAddr = "tb1psjnu8he228hhddeauf5c7jcjhfut6l09kv6uw2cpklvxm4cj49vqvm4
 // createInscribeTransactions({
 //     //filePaths: filePaths, 
 //     privateKey:privateKey, 
-//     receiveAddress:"tb1pk9gg9ywgd3zjpzexsuhzfh5jmfterg8nw8a7h6l4tweuure62hmsxfv8r5", 
-//     networkName:"testnet", 
+//     receiveAddress:"bc1pxlsh06u5ej72gjvmcl9ktuq4jw8ja2pzx5jqgypyxzfw0c32j0yskfd9lc", 
+//     networkName:"fractal_testnet", 
 //     feerate:feeRate, 
 //     padding:padding, 
 //     options:options, 
-//     //batch: batchData
+//     batch: batchData
 // }).then(res => {
 //     console.log(res)
 // }).catch()
 
-//console.log(getInitData2({networkName: "testnet", privateKey: privateKey, addressType: "taproot"}))
+//console.log(getInitData2({networkName: "fractal_testnet", privateKey: privateKey, addressType: "taproot"}))
 
-//console.log(getKeyPair({networkName: "testnet"}))
+//console.log(getKeyPair({networkName: "fractal_testnet"}))
 
 // console.log("inscription cost 1", getInscriptionCost({
 //     //fileSizes: [472], 
 //     feerate: feeRate, 
 //     padding: 550, 
 //     options: options,
-//     //batch: batchData
+//     batch: batchData
 // }))
 
-//console.log(getAllAddress({privateKey: "9c45ef6897c0588477ddf51325ea10203168e06a2ffbc2586c0878364f82012f", networkName: "testnet"}))
+//console.log(getAllAddress({privateKey: "9c45ef6897c0588477ddf51325ea10203168e06a2ffbc2586c0878364f82012f", networkName: "fractal_testnet"}))
 
 //console.log(getDeligateData("7d2f34fec10956e3025a8a02707a7bff9d4eaa841b2baadfedd40e31ce8c1a17i256"))
+
+//console.log(bytesToHex(numberToLittleEndian(551)))

@@ -4,6 +4,7 @@ import {
   createTransaction2,
   createTransaction, 
   getAddressType ,
+  getPsbtDetails,
   getFeeRate ,
   getUtxo, 
   getTransactionDetails, 
@@ -49,6 +50,7 @@ const qip_wallet = {
   getAllUtxo,
   genQrCode,
   createInscriptionTransacrion,
+  getPsbtDetails
 }
 
 const inscription = {
