@@ -313,17 +313,11 @@ const createBatchInscriptionScript = ({pubkey, inscriptionData, pad}) => {
             pointerScript = ['02', pointer]
             _script = _script.concat(pointerScript)
            
-           if(x.deligate){
-                if(!x.deligate.id) throw new Error ("deligate id is required")
-                if(!x.deligate.fileType) throw new Error ("deligate fileType is required")
-                let mimetype = getMimeType(x.deligate.fileType);
-                if(!mimetype) throw new Error ("file type not supported: ", x.deligate.fileType)
-                if(mimetype === "text/plain" || mimetype === "text/html" || mimetype === "text/javascript" || mimetype === "text/markdown"){
-                    mimetype += ";charset=utf-8";
-                }
-                const deligateData = getDeligateData(x.deligate.id)
-                const deligateScript = ['01', ec.encode(mimetype), '0b', deligateData.serilizedId]
-                _script = _script.concat(deligateScript)
+           if(x.delegate){
+                if(!x.delegate.id) throw new Error ("delegate id is required")
+                const delegateData = getDeligateData(x.delegate.id)
+                const delegateScript = ['0b', delegateData.serilizedId]
+                _script = _script.concat(delegateScript)
                 if(x.metadata){
                     const metadataScript = ['05', Uint8Array.from(covertJsonToCbor(x.metadata))]
                     _script = _script.concat(metadataScript)
