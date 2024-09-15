@@ -574,10 +574,10 @@ const getBatchInscription = async ({publicKey, networkName, feerate, padding, ba
         let files = []
         let incs_file_data = []
         batch.data.forEach(x => {
-            if(x.deligate){
-                if(!x.deligate.id) return {status: false, message: "deligate id is required"}
+            if(x.delegate){
+                if(!x.delegate.id) return {status: false, message: "deligate id is required"}
                 const data = {
-                    deligate: x.deligate,
+                    delegate: x.delegate,
                     size: 0
                 }
                 totalSize += data.size
