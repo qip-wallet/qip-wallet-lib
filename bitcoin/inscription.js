@@ -20,7 +20,8 @@ import {
    getAllAddress, 
    signTransaction2, 
    getPsbtDetails, 
-   getInputData
+   getInputData,
+   getAddressType,
 } from './utils.js'
 
 const getFileData = async (file) => {
