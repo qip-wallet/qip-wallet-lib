@@ -1317,55 +1317,107 @@ const createBatchInscribeTx = async ({inscription, receiveAddress, privateKey, n
    }
 }
 
-const createInscribeTx = async ({inscriptions, receiveAddress, privateKey, networkName}) => {
-   try{
-       let transactions = []
-       for (let i = 0; i < inscriptions.length; i++) {
+// const createInscribeTx = async ({inscriptions, receiveAddress, privateKey, networkName}) => {
+//    try{
+//        let transactions = []
+//        for (let i = 0; i < inscriptions.length; i++) {
 
-            //get receive address type and account for only taproot and segwit
-           let inscription = inscriptions[i]
-           let addressEncoding = getAddressEncoding({networkName: networkName})
-           let utxos = await getUtxo({address: inscription.inscriptionAddress, networkName: networkName})
-           if(utxos.length === 0){
-               throw new Error("No funds available for inscription")
-           }
+//             //get receive address type and account for only taproot and segwit
+//            let inscription = inscriptions[i]
+//            let addressEncoding = getAddressEncoding({networkName: networkName})
+//            let utxos = await getUtxo({address: inscription.inscriptionAddress, networkName: networkName})
+//            if(utxos.length === 0){
+//                throw new Error("No funds available for inscription")
+//            }
            
-           let spend_utxo = null
-           utxos.forEach(x => {
-               if(x.value >= inscriptions[i].fee){
-                   spend_utxo = x
-               }
-           })
+//            let spend_utxo = null
+//            utxos.forEach(x => {
+//                if(x.value >= inscriptions[i].fee){
+//                    spend_utxo = x
+//                }
+//            })
 
-           if(spend_utxo === null){
+//            if(spend_utxo === null){
+//                 throw new Error("No funds available for inscription")
+//            }
+//            const redeemtx = Tx.create({
+//                vin  : [{
+//                    txid: spend_utxo.txid,
+//                    vout: spend_utxo.vout,
+//                    prevout: {
+//                        value: spend_utxo.value,
+//                        scriptPubKey: [ 'OP_1', Address.p2tr.decode(inscription.inscriptionAddress, addressEncoding).hex ]
+//                    },
+//                }],
+//                vout : [{
+//                    value: inscription.padding,
+//                    scriptPubKey: [ 'OP_1', Address.p2tr.decode(receiveAddress, addressEncoding).hex ]
+//                }],
+//            });
+
+//            const sig = Signer.taproot.sign(getKeyPair({privateKey:privateKey}).seckey.raw, redeemtx, 0, {extension: inscription.leaf});
+//            redeemtx.vin[0].witness = [ sig.hex, inscription.script_orig, inscription.cblock ];
+//            let rawtx = Tx.encode(redeemtx).hex;
+//            const txid = Tx.util.getTxid(Tx.encode(redeemtx))
+//            transactions.push({txid: txid, txHex: rawtx, id: `${txid}i${i}`})
+//        }
+//        return transactions
+//    }catch(e){
+//        console.log(e)
+//    }
+// }
+
+const createInscribeTx = async ({inscriptions, receiveAddress, privateKey, networkName}) => {
+    try{
+        let transactions = []
+        const addressEncoding = getAddressEncoding({networkName: networkName})
+        const addressType = getAddressType({address: receiveAddress, networkName: networkName})
+        const addr_decode = addressType === "P2WPKH" ? Address.p2wpkh.decode(receiveAddress, addressEncoding).hex : addressType === "P2TR" ? Address.p2tr.decode(receiveAddress, addressEncoding).hex : null
+         if(addr_decode === null) throw new Error ("invalid taaproot or segwit address")
+        for (let i = 0; i < inscriptions.length; i++) {
+             //get receive address type and account for only taproot and segwit
+            let inscription = inscriptions[i]
+            let utxos = await getUtxo({address: inscription.inscriptionAddress, networkName: networkName})
+            if(utxos.length === 0){
                 throw new Error("No funds available for inscription")
-           }
-           const redeemtx = Tx.create({
-               vin  : [{
-                   txid: spend_utxo.txid,
-                   vout: spend_utxo.vout,
-                   prevout: {
-                       value: spend_utxo.value,
-                       scriptPubKey: [ 'OP_1', Address.p2tr.decode(inscription.inscriptionAddress, addressEncoding).hex ]
-                   },
-               }],
-               vout : [{
-                   value: inscription.padding,
-                   scriptPubKey: [ 'OP_1', Address.p2tr.decode(receiveAddress, addressEncoding).hex ]
-               }],
-           });
-
-           const sig = Signer.taproot.sign(getKeyPair({privateKey:privateKey}).seckey.raw, redeemtx, 0, {extension: inscription.leaf});
-           redeemtx.vin[0].witness = [ sig.hex, inscription.script_orig, inscription.cblock ];
-           let rawtx = Tx.encode(redeemtx).hex;
-           const txid = Tx.util.getTxid(Tx.encode(redeemtx))
-           transactions.push({txid: txid, txHex: rawtx, id: `${txid}i${i}`})
-       }
-       return transactions
-   }catch(e){
-       console.log(e)
-   }
-}
+            }
+            
+            let spend_utxo = null
+            utxos.forEach(x => {
+                if(x.value >= inscriptions[i].fee){
+                    spend_utxo = x
+                }
+            })
+ 
+            if(spend_utxo === null){
+                 throw new Error("No funds available for inscription")
+            }
+            const redeemtx = Tx.create({
+                vin  : [{
+                    txid: spend_utxo.txid,
+                    vout: spend_utxo.vout,
+                    prevout: {
+                        value: spend_utxo.value,
+                        scriptPubKey: [ 'OP_1', Address.p2tr.decode(inscription.inscriptionAddress, addressEncoding).hex ]
+                    },
+                }],
+                vout : [{
+                    value: inscription.padding,
+                    scriptPubKey: [ 'OP_1', addr_decode ]
+                }],
+            });
+ 
+            const sig = addressType === "P2TR" ? Signer.taproot.sign(getKeyPair({privateKey:privateKey}).seckey.raw, redeemtx, 0, {extension: inscription.leaf}) : Signer.segwit.sign(getKeyPair({privateKey:privateKey}).seckey.raw, redeemtx, 0, {extension: inscription.leaf});
+            redeemtx.vin[0].witness = [ sig.hex, inscription.script_orig, inscription.cblock ];
+            let rawtx = Tx.encode(redeemtx).hex;
+            const txid = Tx.util.getTxid(Tx.encode(redeemtx))
+            transactions.push({txid: txid, txHex: rawtx, id: `${txid}i${i}`})
+        }
+        return transactions
+    }catch(e){
+        console.log(e)
+    }
+ }
 
 export const createInscribeTransactions = async ({filePaths, privateKey, receiveAddress, networkName, feerate, padding, options, batch}) => {
    try{
