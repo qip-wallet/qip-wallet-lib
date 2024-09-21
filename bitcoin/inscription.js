@@ -1268,7 +1268,11 @@ export const splitFunds = async ({filePaths, privateKey, networkName, feerate, p
 
 const createBatchInscribeTx = async ({inscription, receiveAddress, privateKey, networkName, batch}) => {
    try{
-       const addressEncoding = getAddressEncoding({networkName: networkName})
+
+    const addressEncoding = getAddressEncoding({networkName: networkName})
+    const addressType = getAddressType({address: receiveAddress, networkName: networkName})
+    const addr_decode = addressType === "P2WPKH" ? Address.p2wpkh.decode(receiveAddress, addressEncoding).hex : addressType === "P2TR" ? Address.p2tr.decode(receiveAddress, addressEncoding).hex : null
+    if(addr_decode === null) throw new Error ("invalid taaproot or segwit address")
        const utxos = await getUtxo({address: inscription.inscriptionAddress, networkName: networkName})
        if(utxos.length === 0){
            return {status: false, message: "No funds available for inscription"}
@@ -1290,8 +1294,8 @@ const createBatchInscribeTx = async ({inscription, receiveAddress, privateKey, n
        }]
        const vout = batch.data.map(x => {
            return {
-               value: inscription.padding,
-               scriptPubKey: [ 'OP_1', Address.p2tr.decode(x.receiveAddress, addressEncoding).hex ]
+            value: inscription.padding,
+            scriptPubKey: [ 'OP_1', addr_decode ]
            }
        })
 
@@ -1302,7 +1306,7 @@ const createBatchInscribeTx = async ({inscription, receiveAddress, privateKey, n
 
        let transactions = []
 
-       const sig = Signer.taproot.sign(getKeyPair({privateKey:privateKey}).seckey.raw, redeemtx, 0, {extension: inscription.leaf});
+       const sig = addressType === "P2TR" ? Signer.taproot.sign(getKeyPair({privateKey:privateKey}).seckey.raw, redeemtx, 0, {extension: inscription.leaf}) : Signer.segwit.sign(getKeyPair({privateKey:privateKey}).seckey.raw, redeemtx, 0, {extension: inscription.leaf});
        redeemtx.vin[0].witness = [ sig.hex, inscription.script_orig, inscription.cblock ];
        let rawtx = Tx.encode(redeemtx).hex;
        const txid = Tx.util.getTxid(Tx.encode(redeemtx))
@@ -1374,7 +1378,7 @@ const createInscribeTx = async ({inscriptions, receiveAddress, privateKey, netwo
         const addressEncoding = getAddressEncoding({networkName: networkName})
         const addressType = getAddressType({address: receiveAddress, networkName: networkName})
         const addr_decode = addressType === "P2WPKH" ? Address.p2wpkh.decode(receiveAddress, addressEncoding).hex : addressType === "P2TR" ? Address.p2tr.decode(receiveAddress, addressEncoding).hex : null
-         if(addr_decode === null) throw new Error ("invalid taaproot or segwit address")
+        if(addr_decode === null) throw new Error ("invalid taaproot or segwit address")
         for (let i = 0; i < inscriptions.length; i++) {
              //get receive address type and account for only taproot and segwit
             let inscription = inscriptions[i]
