@@ -1306,7 +1306,7 @@ const createBatchInscribeTx = async ({inscription, receiveAddress, privateKey, n
 
        let transactions = []
 
-       const sig = addressType === "P2TR" ? Signer.taproot.sign(getKeyPair({privateKey:privateKey}).seckey.raw, redeemtx, 0, {extension: inscription.leaf}) : Signer.segwit.sign(getKeyPair({privateKey:privateKey}).seckey.raw, redeemtx, 0, {extension: inscription.leaf});
+       const sig = addressType === "P2TR" ? Signer.taproot.sign(getKeyPair({privateKey:privateKey}).seckey.raw, redeemtx, 0, {extension: inscription.leaf}) : Signer.segwit.sign(getKeyPair({privateKey:privateKey}).seckey.raw, redeemtx, 0, {extension: inscription.leaf, pubkey: hexToBytes(getKeyPair({privateKey:privateKey}).pubkey)})
        redeemtx.vin[0].witness = [ sig.hex, inscription.script_orig, inscription.cblock ];
        let rawtx = Tx.encode(redeemtx).hex;
        const txid = Tx.util.getTxid(Tx.encode(redeemtx))
