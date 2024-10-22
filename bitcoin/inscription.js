@@ -1072,13 +1072,13 @@ export const splitFunds = async ({filePaths, privateKey, networkName, feerate, p
        const addToInscription = (spend_utxo.value - splitTxFee - pad - serviceAmount - collectionAmount) / inscriptions.length
        
         if(options && options.sat_details){
-           let satTxData = await handleSatTx2({networkName: networkName, sat_privateKey: options.sat_details.privateKey, inscriptions: inscriptions, satpoint: options.sat_details.satpoint, spend_utxo: spend_utxo, addToIns: addToInscription})
-           vin = satTxData.vin
-           let n_input = await getInputData("taproot", vin, networkName, Buffer.from(satTxData.tap_publicKey, 'hex'), satTxData.script)
-           n_input.map(x => {
-               input.push(x)
-           })
-           outputs = satTxData.outputs   
+            let satTxData = await handleSatTx2({networkName: networkName, sat_privateKey: options.sat_details.privateKey, inscriptions: inscriptions, satpoint: options.sat_details.satpoint, spend_utxo: spend_utxo, addToIns: addToInscription})
+            vin = satTxData.vin
+             const satInputData = await getInputData("taproot", [vin[0]], networkName, Buffer.from(satTxData.tap_publicKey, 'hex'), satTxData.script)
+             satInputData.forEach(x => {input.push(x)})
+             const spendInputData = await getInputData("taproot", [vin[1]], networkName, Buffer.from(initData.tap_publicKey, 'hex'), fundScript)
+             spendInputData.forEach(x => {input.push(x)})
+            outputs = satTxData.outputs     
        }else{
            vin.push({
                txid: spend_utxo.txid,
